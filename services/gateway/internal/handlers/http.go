@@ -5,21 +5,25 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/pulsecity/services/gateway/internal/domain"
 	natsclient "github.com/pulsecity/services/gateway/internal/nats"
+	"github.com/pulsecity/services/gateway/internal/state"
 	"github.com/pulsecity/services/gateway/internal/ws"
 )
 
 type Dependencies struct {
-	Bus *natsclient.Client
-	Hub *ws.Hub
+	Bus       *natsclient.Client
+	Hub       *ws.Hub
+	Snapshots *state.MapSnapshots
 }
 
 func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /", debugPage)
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.HandleFunc("GET /ws", deps.Hub.HandleWebSocket)
+	mux.HandleFunc("GET /ws", deps.serveWebSocket)
 	mux.HandleFunc("POST /api/v1/games", deps.startGame)
+	mux.HandleFunc("GET /api/v1/games/{gameID}/snapshot", deps.getSnapshot)
 }
 
 func debugPage(w http.ResponseWriter, _ *http.Request) {
@@ -31,6 +35,26 @@ func debugPage(w http.ResponseWriter, _ *http.Request) {
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
+	})
+}
+
+func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
+	gameID := r.URL.Query().Get("game_id")
+	d.Hub.ServeWebSocket(w, r, func(conn *websocket.Conn) error {
+		if gameID == "" {
+			return nil
+		}
+
+		snapshot, ok := d.Snapshots.Get(gameID)
+		if !ok {
+			return nil
+		}
+
+		return conn.WriteJSON(domain.MapSnapshotEnvelope{
+			Type:    "map.snapshot",
+			Subject: "gateway.snapshot_rehidratado",
+			State:   snapshot,
+		})
 	})
 }
 
@@ -55,6 +79,30 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"game_id": command.GameID,
 		"status":  "map_generation_started",
+	})
+}
+
+func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
+	gameID := r.PathValue("gameID")
+	if gameID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing game id",
+		})
+		return
+	}
+
+	snapshot, ok := d.Snapshots.Get(gameID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "snapshot not found",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, domain.MapSnapshotEnvelope{
+		Type:    "map.snapshot",
+		Subject: "gateway.snapshot_http",
+		State:   snapshot,
 	})
 }
 
@@ -188,6 +236,10 @@ const debugHTML = `<!DOCTYPE html>
         gap: 10px;
       }
 
+      .stack.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .log {
         margin-top: 12px;
         max-height: 420px;
@@ -226,6 +278,68 @@ const debugHTML = `<!DOCTYPE html>
         background: rgba(15, 118, 110, 0.08);
         color: var(--accent-strong);
       }
+
+      .map-shell {
+        margin-top: 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .map-grid {
+        display: grid;
+        grid-template-columns: repeat(20, minmax(0, 1fr));
+        gap: 2px;
+        background: #d1c7ba;
+        border-radius: 18px;
+        padding: 10px;
+      }
+
+      .cell {
+        aspect-ratio: 1;
+        border-radius: 4px;
+        position: relative;
+      }
+
+      .cell[data-terrain="water"] {
+        background: #4f86c6;
+      }
+
+      .cell[data-terrain="plain"] {
+        background: #86b971;
+      }
+
+      .cell[data-terrain="forest"] {
+        background: #4f7a45;
+      }
+
+      .cell[data-terrain="hill"] {
+        background: #8c7d69;
+      }
+
+      .cell[data-zone="residential"] {
+        box-shadow: inset 0 0 0 2px rgba(244, 253, 248, 0.5);
+      }
+
+      .cell[data-zone="commercial"] {
+        box-shadow: inset 0 0 0 2px rgba(247, 196, 72, 0.9);
+      }
+
+      .cell[data-zone="industrial"] {
+        box-shadow: inset 0 0 0 2px rgba(193, 87, 65, 0.9);
+      }
+
+      .cell[data-zone="park"] {
+        box-shadow: inset 0 0 0 2px rgba(18, 94, 89, 0.9);
+      }
+
+      .cell.stadium::after {
+        content: "";
+        position: absolute;
+        inset: 20%;
+        border-radius: 50%;
+        background: #f4efe7;
+        border: 2px solid #1e2a2f;
+      }
     </style>
   </head>
   <body>
@@ -245,7 +359,15 @@ const debugHTML = `<!DOCTYPE html>
               <label for="city-name">Nombre de la ciudad</label>
               <input id="city-name" value="Nueva Aurora" />
             </div>
+            <div>
+              <label for="game-id">Game ID</label>
+              <input id="game-id" placeholder="uuid de partida" />
+            </div>
             <button id="create-game" type="button">Crear partida</button>
+            <div class="stack two">
+              <button id="reconnect-socket" type="button">Reconectar socket</button>
+              <button id="load-snapshot" type="button">Cargar snapshot</button>
+            </div>
             <div id="request-status" class="status">Esperando accion.</div>
           </div>
         </article>
@@ -260,6 +382,14 @@ const debugHTML = `<!DOCTYPE html>
       </section>
 
       <section class="panel" style="margin-top: 18px;">
+        <h2>Mapa</h2>
+        <div class="map-shell">
+          <div id="map-summary" class="status">Esperando datos de mapa.</div>
+          <div id="map-grid" class="map-grid"></div>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top: 18px;">
         <h2>Eventos recibidos</h2>
         <ul id="event-log" class="log"></ul>
       </section>
@@ -270,33 +400,22 @@ const debugHTML = `<!DOCTYPE html>
       const socketStatus = document.getElementById("socket-status");
       const latestProgress = document.getElementById("latest-progress");
       const cityNameInput = document.getElementById("city-name");
+      const gameIDInput = document.getElementById("game-id");
       const eventLog = document.getElementById("event-log");
       const createGameButton = document.getElementById("create-game");
+      const reconnectSocketButton = document.getElementById("reconnect-socket");
+      const loadSnapshotButton = document.getElementById("load-snapshot");
+      const mapSummary = document.getElementById("map-summary");
+      const mapGrid = document.getElementById("map-grid");
+
+      let currentMap = null;
+      let currentStadium = null;
+      let currentGameID = new URLSearchParams(window.location.search).get("game_id") || "";
+      let socket = null;
 
       const socketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const socket = new WebSocket(socketProtocol + "//" + window.location.host + "/ws");
-
-      socket.addEventListener("open", () => {
-        socketStatus.textContent = "WebSocket conectado.";
-        socketStatus.classList.remove("warn");
-      });
-
-      socket.addEventListener("close", () => {
-        socketStatus.textContent = "WebSocket desconectado.";
-        socketStatus.classList.add("warn");
-      });
-
-      socket.addEventListener("error", () => {
-        socketStatus.textContent = "Error en WebSocket.";
-        socketStatus.classList.add("warn");
-      });
-
-      socket.addEventListener("message", (event) => {
-        const message = JSON.parse(event.data);
-        latestProgress.textContent =
-          message.subject + " -> " + message.payload.progress + "% | " + message.payload.message;
-        appendEvent(message);
-      });
+      gameIDInput.value = currentGameID;
+      connectSocket();
 
       createGameButton.addEventListener("click", async () => {
         requestStatus.textContent = "Enviando request...";
@@ -314,8 +433,45 @@ const debugHTML = `<!DOCTYPE html>
             throw new Error(payload.error || "request failed");
           }
 
-          requestStatus.textContent =
-            "Partida creada. game_id: " + payload.game_id;
+          currentGameID = payload.game_id;
+          gameIDInput.value = currentGameID;
+          syncURL();
+          connectSocket();
+          requestStatus.textContent = "Partida creada. game_id: " + payload.game_id;
+        } catch (error) {
+          requestStatus.textContent = "Error: " + error.message;
+          requestStatus.classList.add("warn");
+        }
+      });
+
+      reconnectSocketButton.addEventListener("click", () => {
+        currentGameID = gameIDInput.value.trim();
+        syncURL();
+        connectSocket();
+      });
+
+      loadSnapshotButton.addEventListener("click", async () => {
+        currentGameID = gameIDInput.value.trim();
+        syncURL();
+
+        if (!currentGameID) {
+          requestStatus.textContent = "Ingresar un game_id para cargar snapshot.";
+          requestStatus.classList.add("warn");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/v1/games/" + currentGameID + "/snapshot");
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || "snapshot request failed");
+          }
+
+          applyMessage(payload);
+          renderMap();
+          appendEvent(payload);
+          requestStatus.textContent = "Snapshot cargado por HTTP.";
+          requestStatus.classList.remove("warn");
         } catch (error) {
           requestStatus.textContent = "Error: " + error.message;
           requestStatus.classList.add("warn");
@@ -328,11 +484,116 @@ const debugHTML = `<!DOCTYPE html>
         const body = document.createElement("pre");
 
         title.textContent = message.subject;
-        body.textContent = JSON.stringify(message.payload, null, 2);
+        body.textContent = JSON.stringify(message.state || message.patch || message.payload, null, 2);
 
         item.prepend(title);
         item.appendChild(body);
         eventLog.prepend(item);
+      }
+
+      function applyMessage(message) {
+        if (message.type === "map.snapshot") {
+          currentGameID = message.state.game_id || currentGameID;
+          gameIDInput.value = currentGameID;
+          currentMap = message.state.map_data || null;
+          currentStadium = message.state.stadium || null;
+          latestProgress.textContent =
+            message.subject + " -> " + message.state.progress + "% | " + message.state.message;
+          return;
+        }
+
+        if (message.type === "map.patch") {
+          if (message.patch.map_data) {
+            currentMap = message.patch.map_data;
+          }
+          if (message.patch.stadium) {
+            currentStadium = message.patch.stadium;
+          }
+
+          const progressText =
+            (message.patch.progress ?? "?") + "% | " + (message.patch.message || "Sin mensaje");
+          latestProgress.textContent = message.subject + " -> " + progressText;
+        }
+      }
+
+      function connectSocket() {
+        if (socket) {
+          socket.close();
+        }
+
+        const query = currentGameID ? "?game_id=" + encodeURIComponent(currentGameID) : "";
+        socket = new WebSocket(socketProtocol + "//" + window.location.host + "/ws" + query);
+
+        socket.addEventListener("open", () => {
+          socketStatus.textContent = currentGameID
+            ? "WebSocket conectado para " + currentGameID + "."
+            : "WebSocket conectado sin game_id.";
+          socketStatus.classList.remove("warn");
+        });
+
+        socket.addEventListener("close", () => {
+          socketStatus.textContent = "WebSocket desconectado.";
+          socketStatus.classList.add("warn");
+        });
+
+        socket.addEventListener("error", () => {
+          socketStatus.textContent = "Error en WebSocket.";
+          socketStatus.classList.add("warn");
+        });
+
+        socket.addEventListener("message", (event) => {
+          const message = JSON.parse(event.data);
+          applyMessage(message);
+          renderMap();
+          appendEvent(message);
+        });
+      }
+
+      function syncURL() {
+        const url = new URL(window.location.href);
+        if (currentGameID) {
+          url.searchParams.set("game_id", currentGameID);
+        } else {
+          url.searchParams.delete("game_id");
+        }
+        window.history.replaceState({}, "", url);
+      }
+
+      function renderMap() {
+        if (!currentMap) {
+          return;
+        }
+
+        mapGrid.innerHTML = "";
+        mapGrid.style.gridTemplateColumns = "repeat(" + currentMap.width + ", minmax(0, 1fr))";
+
+        for (let y = 0; y < currentMap.height; y += 1) {
+          for (let x = 0; x < currentMap.width; x += 1) {
+            const cell = currentMap.cells[y][x];
+            const tile = document.createElement("div");
+
+            tile.className = "cell";
+            tile.dataset.terrain = cell.terrain;
+            if (cell.zone) {
+              tile.dataset.zone = cell.zone;
+            }
+
+            if (currentStadium && currentStadium.x === x && currentStadium.y === y) {
+              tile.classList.add("stadium");
+            }
+
+            mapGrid.appendChild(tile);
+          }
+        }
+
+        mapSummary.textContent =
+          "Mapa " +
+          currentMap.width +
+          "x" +
+          currentMap.height +
+          (currentStadium
+            ? " | estadio en (" + currentStadium.x + ", " + currentStadium.y + ")"
+            : " | estadio pendiente");
       }
     </script>
   </body>

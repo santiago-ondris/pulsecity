@@ -14,6 +14,7 @@ import (
 	"github.com/pulsecity/services/gateway/internal/domain"
 	httphandlers "github.com/pulsecity/services/gateway/internal/handlers"
 	natsclient "github.com/pulsecity/services/gateway/internal/nats"
+	"github.com/pulsecity/services/gateway/internal/state"
 	"github.com/pulsecity/services/gateway/internal/ws"
 )
 
@@ -28,6 +29,7 @@ func main() {
 	defer bus.Close()
 
 	hub := ws.NewHub()
+	snapshots := state.NewMapSnapshots()
 	if _, err := bus.Subscribe(domain.SubjectMapWildcard, func(subject string, data []byte) {
 		if subject == domain.SubjectMapGenerationStarted {
 			return
@@ -39,10 +41,30 @@ func main() {
 			return
 		}
 
-		hub.Broadcast(domain.MapDeltaEnvelope{
-			Type:    "map.delta",
+		currentState, existed := snapshots.ApplyProgress(progress)
+		if !existed && currentState.MapData != nil {
+			hub.Broadcast(domain.MapSnapshotEnvelope{
+				Type:    "map.snapshot",
+				Subject: subject,
+				State:   currentState,
+			})
+			return
+		}
+
+		stage := currentState.Stage
+		progressValue := currentState.Progress
+		message := currentState.Message
+		hub.Broadcast(domain.MapPatchEnvelope{
+			Type:    "map.patch",
 			Subject: subject,
-			Payload: progress,
+			GameID:  progress.GameID,
+			Patch: domain.MapStatePatch{
+				Stage:    &stage,
+				Progress: &progressValue,
+				Message:  &message,
+				MapData:  progress.MapData,
+				Stadium:  progress.Stadium,
+			},
 		})
 	}); err != nil {
 		log.Fatalf("subscribe map events: %v", err)
@@ -50,8 +72,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
-		Bus: bus,
-		Hub: hub,
+		Bus:       bus,
+		Hub:       hub,
+		Snapshots: snapshots,
 	})
 
 	server := &http.Server{

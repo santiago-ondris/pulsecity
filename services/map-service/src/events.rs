@@ -18,4 +18,28 @@ pub struct MapGenerationProgress {
     pub stage: &'static str,
     pub progress: u8,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map_data: Option<MapData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stadium: Option<GridPoint>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MapData {
+    pub width: usize,
+    pub height: usize,
+    pub cells: Vec<Vec<MapCell>>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MapCell {
+    pub terrain: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zone: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct GridPoint {
+    pub x: usize,
+    pub y: usize,
 }
