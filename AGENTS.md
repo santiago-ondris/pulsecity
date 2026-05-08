@@ -17,6 +17,16 @@ Inspiraciones fundacionales: **Cities Skylines 2** (city builder, gestión urban
 
 ---
 
+## Como trabajar
+
+En cada sesion de Codeo, establecer mini milestones a conseguir en esa sesion, por mas pequeño que sea, nada de tareas mega largas, siempre acordar un objetivo pequeño y terminarlo, y si se quiere seguir en la sesion, plantear nuevo objetivo, y asi sucesivamente, para que cada mini milestone nos termine llevando a los milestones generales.
+Recordar que vengo del mundo REST comun y este es mi primer proyecto tan grande y complejo, asi que ser explicativo siempre como tambien necesito de tus recomendaciones, para instalar una dependencia, usar algo nuevo, usar una tecnologia quizas no propuesta como gRPC por ejemplo, lo que sea, y mantener una estructura de carpetas ordenada siempre. 
+
+## Sobre Obsidian y las notas
+
+Luego de cada sesion y avance, registrar en /docs, los cambios hechos en las carpetas donde amerite. Si es necesario crear nueva carpeta.
+El objetivo es siempre tener mi vault de obsidian actualizado con info pertinente y bien organizada.
+
 ## Estructura del repositorio
 
 ```
@@ -283,11 +293,6 @@ Para contexto más profundo, ver los documentos en la raíz del proyecto:
 - `PulseCity_Experiencia_Jugador.md` — La experiencia desde el punto de vista del jugador
 
 ---
-
-## Sobre Obsidian y las notas
-
-Luego de cada sesion y avance, registrar en /docs, los cambios hechos en las carpetas donde amerite. Si es necesario crear nueva carpeta.
-El objetivo es siempre tener mi vault de obsidian actualizado con info pertinente y bien organizada.
 
 *Generado en sesión de diseño — Mayo 2026.*
 *Actualizar este archivo cuando cambien decisiones de arquitectura o estructura de carpetas.*

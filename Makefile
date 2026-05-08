@@ -1,4 +1,4 @@
-.PHONY: up down build test logs
+.PHONY: up down build test logs run-gateway run-map-service
 
 # Servicios
 up:
@@ -12,21 +12,28 @@ logs:
 
 # Build
 build-rust:
-	cargo build
+	cargo build --manifest-path services/map-service/Cargo.toml
 
 build-go:
-	go build ./...
+	go -C services/gateway build ./...
 
 build: build-rust build-go
 
 # Tests
 test-rust:
-	cargo test
+	cargo test --manifest-path services/map-service/Cargo.toml
 
 test-go:
-	go test ./...
+	go -C services/gateway test ./...
 
 test: test-rust test-go
+
+# Run
+run-gateway:
+	go -C services/gateway run ./cmd/main.go
+
+run-map-service:
+	cargo run --manifest-path services/map-service/Cargo.toml
 
 # NATS — ver eventos en tiempo real
 nats-eventos:
