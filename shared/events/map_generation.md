@@ -45,7 +45,9 @@ Notas:
 
 - `map_data` aparece cuando hay datos de grilla disponibles
 - `stadium` aparece desde la etapa `stadium`
-- la grilla actual es una implementacion simple de transicion, pensada para validar arquitectura antes de Perlin/Voronoi
+- el mapa actual usa una generacion procedural-lite deterministica basada en el nombre de ciudad
+- el terreno ya usa `Perlin 2D` real para elevacion base
+- la zonificacion ya usa particion Voronoi simple con seeds deterministicas por ciudad
 
 ## Contrato WebSocket emitido por el gateway
 

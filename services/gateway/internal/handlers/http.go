@@ -313,39 +313,99 @@ const debugHTML = `<!DOCTYPE html>
         gap: 10px;
       }
 
+      .map-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.76);
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .legend-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
       .map-grid {
         display: grid;
         grid-template-columns: repeat(20, minmax(0, 1fr));
         gap: 2px;
-        background: #d1c7ba;
-        border-radius: 18px;
-        padding: 10px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.5), rgba(30,42,47,0.02)),
+          #d1c7ba;
+        border-radius: 22px;
+        padding: 12px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
       }
 
       .cell {
         aspect-ratio: 1;
-        border-radius: 4px;
+        border-radius: 5px;
         position: relative;
+        overflow: hidden;
+        transform: translateY(0);
+        transition: transform 140ms ease, filter 140ms ease;
+      }
+
+      .cell:hover {
+        transform: translateY(-1px);
+        filter: saturate(1.08);
       }
 
       .cell[data-terrain="water"] {
-        background: #4f86c6;
+        background:
+          linear-gradient(135deg, rgba(255,255,255,0.28), transparent 55%),
+          linear-gradient(180deg, #7bb1df 0%, #3f74b0 100%);
       }
 
       .cell[data-terrain="plain"] {
-        background: #86b971;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,0.22), transparent 60%),
+          linear-gradient(180deg, #9dca82 0%, #6ea85b 100%);
       }
 
       .cell[data-terrain="forest"] {
-        background: #4f7a45;
+        background:
+          radial-gradient(circle at 30% 28%, rgba(255,255,255,0.18), transparent 42%),
+          linear-gradient(180deg, #668f52 0%, #365c31 100%);
       }
 
       .cell[data-terrain="hill"] {
-        background: #8c7d69;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,0.2), transparent 55%),
+          linear-gradient(180deg, #aa9a82 0%, #776751 100%);
+      }
+
+      .cell.coast::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(244, 239, 231, 0.85);
       }
 
       .cell[data-zone="residential"] {
-        box-shadow: inset 0 0 0 2px rgba(244, 253, 248, 0.5);
+        box-shadow: inset 0 0 0 2px rgba(244, 253, 248, 0.52);
       }
 
       .cell[data-zone="commercial"] {
@@ -363,10 +423,20 @@ const debugHTML = `<!DOCTYPE html>
       .cell.stadium::after {
         content: "";
         position: absolute;
-        inset: 20%;
-        border-radius: 50%;
-        background: #f4efe7;
+        inset: 18%;
+        border-radius: 40%;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.95), rgba(220,226,229,0.92));
         border: 2px solid #1e2a2f;
+        box-shadow: 0 0 0 2px rgba(255,255,255,0.5);
+      }
+
+      .cell.stadium::before {
+        content: "";
+        position: absolute;
+        inset: -18%;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(232, 120, 76, 0.28), transparent 62%);
       }
     </style>
   </head>
@@ -412,7 +482,15 @@ const debugHTML = `<!DOCTYPE html>
       <section class="panel" style="margin-top: 18px;">
         <h2>Mapa</h2>
         <div class="map-shell">
-          <div id="map-summary" class="status">Esperando datos de mapa.</div>
+          <div class="map-meta">
+            <div id="map-summary" class="status">Esperando datos de mapa.</div>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-swatch" style="background:#4f86c6;"></span>Agua</span>
+              <span class="legend-item"><span class="legend-swatch" style="background:#7aa95f;"></span>Llano</span>
+              <span class="legend-item"><span class="legend-swatch" style="background:#436a39;"></span>Bosque</span>
+              <span class="legend-item"><span class="legend-swatch" style="background:#8c7d69;"></span>Colina</span>
+            </div>
+          </div>
           <div id="map-grid" class="map-grid"></div>
         </div>
       </section>
@@ -605,6 +683,9 @@ const debugHTML = `<!DOCTYPE html>
             if (cell.zone) {
               tile.dataset.zone = cell.zone;
             }
+            if (isCoastCell(x, y)) {
+              tile.classList.add("coast");
+            }
 
             if (currentStadium && currentStadium.x === x && currentStadium.y === y) {
               tile.classList.add("stadium");
@@ -614,14 +695,58 @@ const debugHTML = `<!DOCTYPE html>
           }
         }
 
+        const stats = summarizeMap();
         mapSummary.textContent =
           "Mapa " +
           currentMap.width +
           "x" +
           currentMap.height +
+          " | agua " + stats.water + "% | bosque " + stats.forest + "% | llano " + stats.plain + "%" +
           (currentStadium
             ? " | estadio en (" + currentStadium.x + ", " + currentStadium.y + ")"
             : " | estadio pendiente");
+      }
+
+      function isCoastCell(x, y) {
+        const cell = currentMap.cells[y][x];
+        if (cell.terrain !== "plain" && cell.terrain !== "forest") {
+          return false;
+        }
+
+        const neighbors = [
+          [x - 1, y],
+          [x + 1, y],
+          [x, y - 1],
+          [x, y + 1]
+        ];
+
+        return neighbors.some(([nx, ny]) => {
+          if (nx < 0 || ny < 0 || nx >= currentMap.width || ny >= currentMap.height) {
+            return false;
+          }
+          return currentMap.cells[ny][nx].terrain === "water";
+        });
+      }
+
+      function summarizeMap() {
+        let water = 0;
+        let forest = 0;
+        let plain = 0;
+        const total = currentMap.width * currentMap.height;
+
+        for (const row of currentMap.cells) {
+          for (const cell of row) {
+            if (cell.terrain === "water") water += 1;
+            if (cell.terrain === "forest") forest += 1;
+            if (cell.terrain === "plain") plain += 1;
+          }
+        }
+
+        return {
+          water: Math.round((water / total) * 100),
+          forest: Math.round((forest / total) * 100),
+          plain: Math.round((plain / total) * 100)
+        };
       }
     </script>
   </body>
