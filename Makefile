@@ -1,4 +1,4 @@
-.PHONY: up down build test logs run-gateway run-map-service
+.PHONY: up down build test logs run-gateway run-map-service run-frontend
 
 # Servicios
 up:
@@ -34,6 +34,9 @@ run-gateway:
 
 run-map-service:
 	cargo run --manifest-path services/map-service/Cargo.toml
+
+run-frontend:
+	npm run dev --prefix frontend
 
 # NATS — ver eventos en tiempo real
 nats-eventos:
