@@ -1,0 +1,20 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: pulsecity
+      POSTGRES_PASSWORD: pulsecity
+      POSTGRES_DB: pulsecity_dev
+    ports:
+      - "5433:5432"  
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+volumes:
+  pgdata:
