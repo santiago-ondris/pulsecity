@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pulsecity/services/gateway/internal/domain"
 	natsclient "github.com/pulsecity/services/gateway/internal/nats"
+	"github.com/pulsecity/services/gateway/internal/persistence"
 	"github.com/pulsecity/services/gateway/internal/state"
 	"github.com/pulsecity/services/gateway/internal/ws"
 )
@@ -15,6 +16,7 @@ import (
 type Dependencies struct {
 	Bus       *natsclient.Client
 	Hub       *ws.Hub
+	Store     *persistence.Store
 	Snapshots *state.MapSnapshots
 }
 
@@ -47,7 +49,15 @@ func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		snapshot, ok := d.Snapshots.Get(gameID)
 		if !ok {
-			return nil
+			rehydrated, found, err := d.Store.GetSnapshot(r.Context(), gameID)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return nil
+			}
+			d.Snapshots.Set(rehydrated)
+			snapshot = rehydrated
 		}
 
 		return conn.WriteJSON(domain.MapSnapshotEnvelope{
@@ -67,6 +77,13 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 	command := domain.MapGenerationRequest{
 		GameID:   uuid.NewString(),
 		CityName: request.CityName,
+	}
+
+	if err := d.Store.CreateGame(r.Context(), command.GameID, command.CityName); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to persist game",
+		})
+		return
 	}
 
 	if err := d.Bus.PublishJSON(domain.SubjectMapGenerationStarted, command); err != nil {
@@ -93,10 +110,21 @@ func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, ok := d.Snapshots.Get(gameID)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "snapshot not found",
-		})
-		return
+		rehydrated, found, err := d.Store.GetSnapshot(r.Context(), gameID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "failed to load snapshot",
+			})
+			return
+		}
+		if !found {
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"error": "snapshot not found",
+			})
+			return
+		}
+		d.Snapshots.Set(rehydrated)
+		snapshot = rehydrated
 	}
 
 	writeJSON(w, http.StatusOK, domain.MapSnapshotEnvelope{

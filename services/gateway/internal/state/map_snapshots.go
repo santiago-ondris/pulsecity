@@ -50,3 +50,10 @@ func (s *MapSnapshots) Get(gameID string) (domain.MapClientState, bool) {
 	state, ok := s.store[gameID]
 	return state, ok
 }
+
+func (s *MapSnapshots) Set(state domain.MapClientState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.store[state.GameID] = state
+}

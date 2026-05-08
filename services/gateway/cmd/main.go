@@ -14,6 +14,7 @@ import (
 	"github.com/pulsecity/services/gateway/internal/domain"
 	httphandlers "github.com/pulsecity/services/gateway/internal/handlers"
 	natsclient "github.com/pulsecity/services/gateway/internal/nats"
+	"github.com/pulsecity/services/gateway/internal/persistence"
 	"github.com/pulsecity/services/gateway/internal/state"
 	"github.com/pulsecity/services/gateway/internal/ws"
 )
@@ -21,12 +22,23 @@ import (
 func main() {
 	port := envOrDefault("PORT", "8080")
 	natsURL := envOrDefault("NATS_URL", "nats://localhost:4222")
+	databaseURL := envOrDefault("DATABASE_URL", "postgres://pulsecity:pulsecity@localhost:5433/pulsecity_dev?sslmode=disable")
 
 	bus, err := natsclient.New(natsURL)
 	if err != nil {
 		log.Fatalf("connect nats: %v", err)
 	}
 	defer bus.Close()
+
+	store, err := persistence.NewStore(context.Background(), databaseURL)
+	if err != nil {
+		log.Fatalf("connect postgres: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.EnsureSchema(context.Background()); err != nil {
+		log.Fatalf("ensure postgres schema: %v", err)
+	}
 
 	hub := ws.NewHub()
 	snapshots := state.NewMapSnapshots()
@@ -42,6 +54,12 @@ func main() {
 		}
 
 		currentState, existed := snapshots.ApplyProgress(progress)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := store.UpsertSnapshot(ctx, currentState); err != nil {
+			log.Printf("persist snapshot %s: %v", currentState.GameID, err)
+		}
+		cancel()
+
 		if !existed && currentState.MapData != nil {
 			hub.Broadcast(domain.MapSnapshotEnvelope{
 				Type:    "map.snapshot",
@@ -74,6 +92,7 @@ func main() {
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
 		Bus:       bus,
 		Hub:       hub,
+		Store:     store,
 		Snapshots: snapshots,
 	})
 

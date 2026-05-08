@@ -152,6 +152,7 @@ y el `gateway` ya tiene snapshot en memoria, envia inmediatamente:
 
 ## Limitacion actual
 
-- la rehidratacion vive solo en memoria del proceso `gateway`
-- si el proceso se reinicia, se pierde el snapshot cacheado
-- todavia no hay persistencia ni resincronizacion desde base de datos
+- el `gateway` usa cache en memoria para acceso rapido
+- si el snapshot no esta en memoria, intenta rehidratarlo desde PostgreSQL
+- la persistencia actual guarda el ultimo snapshot completo por `game_id`
+- no hay todavia historial de versiones ni eventos reproducibles desde base
