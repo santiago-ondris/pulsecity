@@ -39,25 +39,60 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS games (
 	game_id TEXT PRIMARY KEY,
 	city_name TEXT NOT NULL DEFAULT '',
+	franchise_name TEXT NOT NULL DEFAULT '',
+	abbreviation TEXT NOT NULL DEFAULT '',
+	primary_color TEXT NOT NULL DEFAULT '',
+	secondary_color TEXT NOT NULL DEFAULT '',
+	accent_color TEXT NOT NULL DEFAULT '',
+	initial_scenario TEXT NOT NULL DEFAULT 'expansion',
 	status TEXT NOT NULL,
 	current_snapshot JSONB,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE games ADD COLUMN IF NOT EXISTS franchise_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS abbreviation TEXT NOT NULL DEFAULT '';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS primary_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS secondary_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS accent_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS initial_scenario TEXT NOT NULL DEFAULT 'expansion';
 `
 
 	_, err := s.pool.Exec(ctx, query)
 	return err
 }
 
-func (s *Store) CreateGame(ctx context.Context, gameID, cityName string) error {
+func (s *Store) CreateGame(ctx context.Context, setup domain.GameSetup) error {
 	const query = `
-INSERT INTO games (game_id, city_name, status)
-VALUES ($1, $2, 'generation_started')
+INSERT INTO games (
+	game_id,
+	city_name,
+	franchise_name,
+	abbreviation,
+	primary_color,
+	secondary_color,
+	accent_color,
+	initial_scenario,
+	status
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (game_id) DO NOTHING;
 `
 
-	_, err := s.pool.Exec(ctx, query, gameID, cityName)
+	_, err := s.pool.Exec(
+		ctx,
+		query,
+		setup.GameID,
+		setup.CityName,
+		setup.FranchiseName,
+		setup.Abbreviation,
+		setup.PrimaryColor,
+		setup.SecondaryColor,
+		setup.AccentColor,
+		setup.InitialScenario,
+		setup.Status,
+	)
 	return err
 }
 
@@ -79,6 +114,52 @@ SET status = EXCLUDED.status,
 	now := time.Now().UTC()
 	_, err = s.pool.Exec(ctx, query, state.GameID, statusFromStage(state.Stage), payload, now)
 	return err
+}
+
+func (s *Store) GetGame(ctx context.Context, gameID string) (domain.GameSetup, bool, error) {
+	const query = `
+SELECT
+	game_id,
+	city_name,
+	franchise_name,
+	abbreviation,
+	primary_color,
+	secondary_color,
+	accent_color,
+	initial_scenario,
+	status,
+	created_at,
+	updated_at
+FROM games
+WHERE game_id = $1;
+`
+
+	var game domain.GameSetup
+	var createdAt time.Time
+	var updatedAt time.Time
+	if err := s.pool.QueryRow(ctx, query, gameID).Scan(
+		&game.GameID,
+		&game.CityName,
+		&game.FranchiseName,
+		&game.Abbreviation,
+		&game.PrimaryColor,
+		&game.SecondaryColor,
+		&game.AccentColor,
+		&game.InitialScenario,
+		&game.Status,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.GameSetup{}, false, nil
+		}
+		return domain.GameSetup{}, false, err
+	}
+
+	game.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	game.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+
+	return game, true, nil
 }
 
 func (s *Store) GetSnapshot(ctx context.Context, gameID string) (domain.MapClientState, bool, error) {

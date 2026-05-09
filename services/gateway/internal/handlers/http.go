@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -25,6 +26,7 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.HandleFunc("GET /ws", deps.serveWebSocket)
 	mux.HandleFunc("POST /api/v1/games", deps.startGame)
+	mux.HandleFunc("GET /api/v1/games/{gameID}", deps.getGame)
 	mux.HandleFunc("GET /api/v1/games/{gameID}/snapshot", deps.getSnapshot)
 }
 
@@ -79,7 +81,20 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 		CityName: request.CityName,
 	}
 
-	if err := d.Store.CreateGame(r.Context(), command.GameID, command.CityName); err != nil {
+	setup := domain.GameSetup{
+		GameID:          command.GameID,
+		CityName:        normalizeText(request.CityName, "Nueva Aurora"),
+		FranchiseName:   normalizeText(request.FranchiseName, "Lighthouses"),
+		Abbreviation:    normalizeAbbreviation(request.Abbreviation),
+		PrimaryColor:    normalizeColor(request.PrimaryColor, "#00C896"),
+		SecondaryColor:  normalizeColor(request.SecondaryColor, "#7B8CDE"),
+		AccentColor:     normalizeColor(request.AccentColor, "#FFAA00"),
+		InitialScenario: normalizeScenario(request.InitialScenario),
+		Status:          "generation_started",
+	}
+	command.CityName = setup.CityName
+
+	if err := d.Store.CreateGame(r.Context(), setup); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to persist game",
 		})
@@ -97,6 +112,32 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 		"game_id": command.GameID,
 		"status":  "map_generation_started",
 	})
+}
+
+func (d Dependencies) getGame(w http.ResponseWriter, r *http.Request) {
+	gameID := r.PathValue("gameID")
+	if gameID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing game id",
+		})
+		return
+	}
+
+	game, found, err := d.Store.GetGame(r.Context(), gameID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load game",
+		})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "game not found",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, game)
 }
 
 func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +179,46 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func normalizeText(value, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback
+	}
+
+	return trimmed
+}
+
+func normalizeAbbreviation(value string) string {
+	trimmed := strings.ToUpper(strings.TrimSpace(value))
+	if len(trimmed) == 0 {
+		return "NEW"
+	}
+
+	if len(trimmed) > 3 {
+		return trimmed[:3]
+	}
+
+	return trimmed
+}
+
+func normalizeColor(value, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback
+	}
+
+	return trimmed
+}
+
+func normalizeScenario(value string) string {
+	switch value {
+	case "rebuild", "contention", "decline", "expansion":
+		return value
+	default:
+		return "expansion"
+	}
 }
 
 const debugHTML = `<!DOCTYPE html>

@@ -48,3 +48,17 @@ export interface MapPatchEnvelope {
 }
 
 export type MapEvent = MapSnapshotEnvelope | MapPatchEnvelope;
+
+export interface GameSetup {
+  game_id: string;
+  city_name: string;
+  franchise_name: string;
+  abbreviation: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  initial_scenario: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
