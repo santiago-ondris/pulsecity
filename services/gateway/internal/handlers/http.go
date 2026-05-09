@@ -82,15 +82,16 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setup := domain.GameSetup{
-		GameID:          command.GameID,
-		CityName:        normalizeText(request.CityName, "Nueva Aurora"),
-		FranchiseName:   normalizeText(request.FranchiseName, "Lighthouses"),
-		Abbreviation:    normalizeAbbreviation(request.Abbreviation),
-		PrimaryColor:    normalizeColor(request.PrimaryColor, "#00C896"),
-		SecondaryColor:  normalizeColor(request.SecondaryColor, "#7B8CDE"),
-		AccentColor:     normalizeColor(request.AccentColor, "#FFAA00"),
-		InitialScenario: normalizeScenario(request.InitialScenario),
-		Status:          "generation_started",
+		GameID:             command.GameID,
+		CityName:           normalizeText(request.CityName, "Nueva Aurora"),
+		FranchiseName:      normalizeText(request.FranchiseName, "Lighthouses"),
+		Abbreviation:       normalizeAbbreviation(request.Abbreviation),
+		PrimaryColor:       normalizeColor(request.PrimaryColor, "#00C896"),
+		SecondaryColor:     normalizeColor(request.SecondaryColor, "#7B8CDE"),
+		AccentColor:        normalizeColor(request.AccentColor, "#FFAA00"),
+		InitialScenario:    normalizeScenario(request.InitialScenario),
+		CityManagementMode: normalizeCityManagementMode(request.CityManagementMode),
+		Status:             "generation_started",
 	}
 	command.CityName = setup.CityName
 
@@ -218,6 +219,15 @@ func normalizeScenario(value string) string {
 		return value
 	default:
 		return "expansion"
+	}
+}
+
+func normalizeCityManagementMode(value string) string {
+	switch value {
+	case "owner_influence", "dual_figure":
+		return value
+	default:
+		return "owner_influence"
 	}
 }
 

@@ -45,7 +45,9 @@ CREATE TABLE IF NOT EXISTS games (
 	secondary_color TEXT NOT NULL DEFAULT '',
 	accent_color TEXT NOT NULL DEFAULT '',
 	initial_scenario TEXT NOT NULL DEFAULT 'expansion',
+	city_management_mode TEXT NOT NULL DEFAULT 'owner_influence',
 	status TEXT NOT NULL,
+	owner_intro_event JSONB,
 	current_snapshot JSONB,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -57,6 +59,8 @@ ALTER TABLE games ADD COLUMN IF NOT EXISTS primary_color TEXT NOT NULL DEFAULT '
 ALTER TABLE games ADD COLUMN IF NOT EXISTS secondary_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS accent_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS initial_scenario TEXT NOT NULL DEFAULT 'expansion';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS city_management_mode TEXT NOT NULL DEFAULT 'owner_influence';
+ALTER TABLE games ADD COLUMN IF NOT EXISTS owner_intro_event JSONB;
 `
 
 	_, err := s.pool.Exec(ctx, query)
@@ -74,9 +78,11 @@ INSERT INTO games (
 	secondary_color,
 	accent_color,
 	initial_scenario,
+	city_management_mode,
+	owner_intro_event,
 	status
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10)
 ON CONFLICT (game_id) DO NOTHING;
 `
 
@@ -91,6 +97,7 @@ ON CONFLICT (game_id) DO NOTHING;
 		setup.SecondaryColor,
 		setup.AccentColor,
 		setup.InitialScenario,
+		setup.CityManagementMode,
 		setup.Status,
 	)
 	return err
@@ -127,6 +134,8 @@ SELECT
 	secondary_color,
 	accent_color,
 	initial_scenario,
+	city_management_mode,
+	owner_intro_event,
 	status,
 	created_at,
 	updated_at
@@ -137,6 +146,7 @@ WHERE game_id = $1;
 	var game domain.GameSetup
 	var createdAt time.Time
 	var updatedAt time.Time
+	var ownerIntroRaw []byte
 	if err := s.pool.QueryRow(ctx, query, gameID).Scan(
 		&game.GameID,
 		&game.CityName,
@@ -146,6 +156,8 @@ WHERE game_id = $1;
 		&game.SecondaryColor,
 		&game.AccentColor,
 		&game.InitialScenario,
+		&game.CityManagementMode,
+		&ownerIntroRaw,
 		&game.Status,
 		&createdAt,
 		&updatedAt,
@@ -158,8 +170,32 @@ WHERE game_id = $1;
 
 	game.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 	game.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+	if len(ownerIntroRaw) > 0 {
+		var event domain.NarrativeEvent
+		if err := json.Unmarshal(ownerIntroRaw, &event); err != nil {
+			return domain.GameSetup{}, false, fmt.Errorf("unmarshal owner intro event: %w", err)
+		}
+		game.OwnerIntroEvent = &event
+	}
 
 	return game, true, nil
+}
+
+func (s *Store) SetOwnerIntroEvent(ctx context.Context, gameID string, event domain.NarrativeEvent) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("marshal owner intro event: %w", err)
+	}
+
+	const query = `
+UPDATE games
+SET owner_intro_event = $2::jsonb,
+	updated_at = $3
+WHERE game_id = $1;
+`
+
+	_, err = s.pool.Exec(ctx, query, gameID, payload, time.Now().UTC())
+	return err
 }
 
 func (s *Store) GetSnapshot(ctx context.Context, gameID string) (domain.MapClientState, bool, error) {

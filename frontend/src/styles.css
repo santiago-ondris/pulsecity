@@ -138,6 +138,7 @@ button {
 .copy,
 .microcopy,
 .scenario-card p,
+.management-card p,
 .timeline-item p,
 .event-list span,
 .status-row span,
@@ -270,7 +271,13 @@ button {
   gap: var(--space-md);
 }
 
-.scenario-card {
+.management-grid {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.scenario-card,
+.management-card {
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-lg);
@@ -281,16 +288,19 @@ button {
   transition: border-color 150ms ease-out, background 150ms ease-out;
 }
 
-.scenario-card:hover {
+.scenario-card:hover,
+.management-card:hover {
   border-color: var(--accent-primary-border);
 }
 
-.scenario-card.active {
+.scenario-card.active,
+.management-card.active {
   background: var(--accent-primary-bg);
   border-color: var(--accent-primary-border);
 }
 
 .scenario-card strong,
+.management-card strong,
 .timeline-item strong,
 .event-list strong,
 .status-row strong,
@@ -311,6 +321,8 @@ button {
 .preview-rail {
   display: grid;
   gap: var(--space-xl);
+  grid-column: 3;
+  grid-row: 1 / span 3;
 }
 
 .preview-panel {
@@ -400,6 +412,7 @@ button {
 .primary-action:active,
 .secondary-action:active,
 .scenario-card:active,
+.management-card:active,
 .preset:active {
   transform: scale(0.97);
 }
@@ -448,6 +461,12 @@ button {
   background: var(--semantic-info-bg);
   color: var(--semantic-info);
   border-color: var(--semantic-info-border);
+}
+
+.badge-urgent {
+  background: #ff6b2b16;
+  color: var(--semantic-urgent);
+  border-color: #ff6b2b40;
 }
 
 .ceremony-panel {
@@ -615,6 +634,35 @@ button {
 .event-list strong,
 .event-list span {
   display: block;
+}
+
+.narrative-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-xl);
+  background: rgba(10, 10, 11, 0.84);
+}
+
+.narrative-modal {
+  width: min(680px, 100%);
+  background: var(--bg-surface);
+}
+
+.narrative-body {
+  margin: var(--space-lg) 0 0;
+  font-family: "Bona Nova SC", serif;
+  font-size: 24px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.narrative-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-xl);
 }
 
 @media (max-width: 1220px) {

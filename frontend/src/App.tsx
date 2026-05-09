@@ -4,8 +4,9 @@ import type {
   GameSetup,
   MapCell,
   MapClientState,
-  MapEvent,
   MapSnapshotEnvelope,
+  NarrativeEvent,
+  RealtimeEvent,
 } from "./types";
 
 const gatewayBaseUrl = "http://localhost:8080";
@@ -96,6 +97,25 @@ const colorPresets = [
 ] as const;
 
 type ScenarioId = (typeof initialScenarios)[number]["id"];
+const cityManagementModes = [
+  {
+    id: "owner_influence",
+    label: "Dueño con influencia",
+    description:
+      "Sos el GM de la franquicia. Tu poder sobre la ciudad es indirecto: lobby, financiamiento de proyectos y presión política.",
+    impact:
+      "El alcalde tiene agenda propia y la ciudad reacciona como un organismo independiente.",
+  },
+  {
+    id: "dual_figure",
+    label: "Figura dual",
+    description:
+      "Controlás tanto la franquicia como la ciudad directamente. Dos sombreros, control total.",
+    impact:
+      "La ciudad queda bajo tu manejo directo y el basket convive con ese control urbano.",
+  },
+] as const;
+type CityManagementModeId = (typeof cityManagementModes)[number]["id"];
 
 export function App() {
   const [cityName, setCityName] = useState("Nueva Aurora");
@@ -105,11 +125,13 @@ export function App() {
   const [secondaryColor, setSecondaryColor] = useState("#7B8CDE");
   const [accentColor, setAccentColor] = useState("#FFAA00");
   const [selectedScenario, setSelectedScenario] = useState<ScenarioId>("expansion");
+  const [cityManagementMode, setCityManagementMode] = useState<CityManagementModeId>("owner_influence");
   const [gameId, setGameId] = useState("");
   const [status, setStatus] = useState("Esperando la orden de fundacion.");
   const [socketStatus, setSocketStatus] = useState("Conectando...");
   const [mapState, setMapState] = useState<MapClientState>(initialState);
-  const [events, setEvents] = useState<MapEvent[]>([]);
+  const [events, setEvents] = useState<RealtimeEvent[]>([]);
+  const [activeNarrativeEvent, setActiveNarrativeEvent] = useState<NarrativeEvent | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -148,13 +170,18 @@ export function App() {
     });
 
     socket.addEventListener("message", (event) => {
-      const payload = JSON.parse(event.data) as MapEvent;
+      const payload = JSON.parse(event.data) as RealtimeEvent;
       applyEvent(payload);
       setEvents((current) => [payload, ...current].slice(0, 12));
     });
   }
 
-  function applyEvent(payload: MapEvent) {
+  function applyEvent(payload: RealtimeEvent) {
+    if (payload.type === "narrative.event") {
+      setActiveNarrativeEvent(payload);
+      return;
+    }
+
     if (payload.type === "map.snapshot") {
       setMapState(payload.state);
       setGameId(payload.state.game_id);
@@ -190,6 +217,7 @@ export function App() {
           secondary_color: secondaryColor,
           accent_color: accentColor,
           initial_scenario: selectedScenario,
+          city_management_mode: cityManagementMode,
         }),
       });
 
@@ -257,6 +285,12 @@ export function App() {
     setAccentColor(setup.accent_color);
     if (isScenarioId(setup.initial_scenario)) {
       setSelectedScenario(setup.initial_scenario);
+    }
+    if (isCityManagementModeId(setup.city_management_mode)) {
+      setCityManagementMode(setup.city_management_mode);
+    }
+    if (setup.owner_intro_event) {
+      setActiveNarrativeEvent(setup.owner_intro_event);
     }
   }
 
@@ -377,6 +411,32 @@ export function App() {
           </div>
         </article>
 
+        <article className="panel">
+          <div className="panel-header">
+            <p className="eyebrow">03 / Gestión de ciudad</p>
+            <h2>Definí cómo gobernás la ciudad.</h2>
+          </div>
+
+          <div className="management-grid">
+            {cityManagementModes.map((mode) => {
+              const active = mode.id === cityManagementMode;
+
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  className={active ? "management-card active" : "management-card"}
+                  onClick={() => setCityManagementMode(mode.id)}
+                >
+                  <span className="scenario-label">{mode.label}</span>
+                  <strong>{mode.description}</strong>
+                  <p>{mode.impact}</p>
+                </button>
+              );
+            })}
+          </div>
+        </article>
+
         <aside className="preview-rail">
           <article className="panel preview-panel" style={previewStyle}>
             <div className="panel-header">
@@ -405,6 +465,10 @@ export function App() {
                 <strong>{scenario.label}</strong>
               </div>
               <div>
+                <span>Gestión de ciudad</span>
+                <strong>{managementModeLabel(cityManagementMode)}</strong>
+              </div>
+              <div>
                 <span>Lectura inicial</span>
                 <strong>{scenario.pressure}</strong>
               </div>
@@ -413,7 +477,7 @@ export function App() {
 
           <article className="panel launch-panel">
             <div className="panel-header">
-              <p className="eyebrow">03 / Confirmacion</p>
+              <p className="eyebrow">04 / Confirmacion</p>
               <h2>Cuando confirmás, nace el mundo.</h2>
             </div>
 
@@ -547,9 +611,7 @@ export function App() {
                   events.map((event, index) => (
                     <li key={`${event.subject}-${index}`}>
                       <strong>{event.subject}</strong>
-                      <span>
-                        {event.type === "map.snapshot" ? event.state.message : event.patch.message}
-                      </span>
+                      <span>{describeRealtimeEvent(event)}</span>
                     </li>
                   ))
                 )}
@@ -558,6 +620,35 @@ export function App() {
           </aside>
         </div>
       </section>
+
+      {activeNarrativeEvent ? (
+        <div className="narrative-overlay" role="dialog" aria-modal="true">
+          <article className="narrative-modal panel">
+            <div className="panel-header">
+              <p className="eyebrow">Evento obligatorio</p>
+              <h2>{activeNarrativeEvent.title}</h2>
+            </div>
+
+            <StatusBadge label="Owner" tone="urgent" />
+            <p className="narrative-body">{activeNarrativeEvent.body}</p>
+
+            <div className="narrative-actions">
+              {(activeNarrativeEvent.choices ?? [{ id: "continue", label: "Entendido" }]).map(
+                (choice) => (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    className="primary-action"
+                    onClick={() => setActiveNarrativeEvent(null)}
+                  >
+                    {choice.label}
+                  </button>
+                ),
+              )}
+            </div>
+          </article>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -616,9 +707,23 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusBadge({ label, tone }: { label: string; tone: "primary" | "info" }) {
+function StatusBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "primary" | "info" | "urgent";
+}) {
   return (
-    <span className={tone === "primary" ? "badge badge-primary" : "badge badge-info"}>
+    <span
+      className={
+        tone === "primary"
+          ? "badge badge-primary"
+          : tone === "urgent"
+            ? "badge badge-urgent"
+            : "badge badge-info"
+      }
+    >
       <span className="badge-dot" />
       {label}
     </span>
@@ -712,4 +817,24 @@ function gridColumns(width: number): CSSProperties {
 
 function isScenarioId(value: string): value is ScenarioId {
   return initialScenarios.some((scenario) => scenario.id === value);
+}
+
+function isCityManagementModeId(value: string): value is CityManagementModeId {
+  return cityManagementModes.some((mode) => mode.id === value);
+}
+
+function managementModeLabel(value: CityManagementModeId) {
+  return cityManagementModes.find((mode) => mode.id === value)?.label ?? "Dueño con influencia";
+}
+
+function describeRealtimeEvent(event: RealtimeEvent) {
+  if (event.type === "narrative.event") {
+    return event.title;
+  }
+
+  if (event.type === "map.snapshot") {
+    return event.state.message;
+  }
+
+  return event.patch.message ?? "Patch recibido";
 }

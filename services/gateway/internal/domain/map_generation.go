@@ -10,13 +10,14 @@ const (
 )
 
 type StartGameRequest struct {
-	CityName        string `json:"city_name"`
-	FranchiseName   string `json:"franchise_name"`
-	Abbreviation    string `json:"abbreviation"`
-	PrimaryColor    string `json:"primary_color"`
-	SecondaryColor  string `json:"secondary_color"`
-	AccentColor     string `json:"accent_color"`
-	InitialScenario string `json:"initial_scenario"`
+	CityName           string `json:"city_name"`
+	FranchiseName      string `json:"franchise_name"`
+	Abbreviation       string `json:"abbreviation"`
+	PrimaryColor       string `json:"primary_color"`
+	SecondaryColor     string `json:"secondary_color"`
+	AccentColor        string `json:"accent_color"`
+	InitialScenario    string `json:"initial_scenario"`
+	CityManagementMode string `json:"city_management_mode"`
 }
 
 type MapGenerationRequest struct {
@@ -25,17 +26,38 @@ type MapGenerationRequest struct {
 }
 
 type GameSetup struct {
-	GameID          string `json:"game_id"`
-	CityName        string `json:"city_name"`
-	FranchiseName   string `json:"franchise_name"`
-	Abbreviation    string `json:"abbreviation"`
-	PrimaryColor    string `json:"primary_color"`
-	SecondaryColor  string `json:"secondary_color"`
-	AccentColor     string `json:"accent_color"`
-	InitialScenario string `json:"initial_scenario"`
-	Status          string `json:"status"`
-	CreatedAt       string `json:"created_at,omitempty"`
-	UpdatedAt       string `json:"updated_at,omitempty"`
+	GameID             string          `json:"game_id"`
+	CityName           string          `json:"city_name"`
+	FranchiseName      string          `json:"franchise_name"`
+	Abbreviation       string          `json:"abbreviation"`
+	PrimaryColor       string          `json:"primary_color"`
+	SecondaryColor     string          `json:"secondary_color"`
+	AccentColor        string          `json:"accent_color"`
+	InitialScenario    string          `json:"initial_scenario"`
+	CityManagementMode string          `json:"city_management_mode"`
+	OwnerIntroEvent    *NarrativeEvent `json:"owner_intro_event,omitempty"`
+	Status             string          `json:"status"`
+	CreatedAt          string          `json:"created_at,omitempty"`
+	UpdatedAt          string          `json:"updated_at,omitempty"`
+}
+
+type NarrativeChoice struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+type NarrativeEvent struct {
+	EventID  string            `json:"event_id"`
+	GameID   string            `json:"game_id"`
+	Type     string            `json:"type"`
+	Subject  string            `json:"subject"`
+	Emitter  string            `json:"emitter"`
+	Kind     string            `json:"kind"`
+	Urgency  string            `json:"urgency"`
+	Title    string            `json:"title"`
+	Body     string            `json:"body"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Choices  []NarrativeChoice `json:"choices,omitempty"`
 }
 
 type MapGenerationProgress struct {

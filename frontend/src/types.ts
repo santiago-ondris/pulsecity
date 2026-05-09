@@ -47,7 +47,26 @@ export interface MapPatchEnvelope {
   patch: MapStatePatch;
 }
 
-export type MapEvent = MapSnapshotEnvelope | MapPatchEnvelope;
+export interface NarrativeChoice {
+  id: string;
+  label: string;
+}
+
+export interface NarrativeEvent {
+  event_id: string;
+  game_id: string;
+  type: "narrative.event";
+  subject: string;
+  emitter: string;
+  kind: string;
+  urgency: string;
+  title: string;
+  body: string;
+  metadata?: Record<string, string>;
+  choices?: NarrativeChoice[];
+}
+
+export type RealtimeEvent = MapSnapshotEnvelope | MapPatchEnvelope | NarrativeEvent;
 
 export interface GameSetup {
   game_id: string;
@@ -58,6 +77,8 @@ export interface GameSetup {
   secondary_color: string;
   accent_color: string;
   initial_scenario: string;
+  city_management_mode: string;
+  owner_intro_event?: NarrativeEvent;
   status: string;
   created_at?: string;
   updated_at?: string;
