@@ -66,7 +66,22 @@ export interface NarrativeEvent {
   choices?: NarrativeChoice[];
 }
 
-export type RealtimeEvent = MapSnapshotEnvelope | MapPatchEnvelope | NarrativeEvent;
+export interface NarrativeResponseEvent {
+  type: "narrative.response";
+  subject: string;
+  game_id: string;
+  event_id: string;
+  choice: NarrativeChoice;
+  emitter: string;
+  metadata?: Record<string, string>;
+  timestamp: string;
+}
+
+export type RealtimeEvent =
+  | MapSnapshotEnvelope
+  | MapPatchEnvelope
+  | NarrativeEvent
+  | NarrativeResponseEvent;
 
 export interface GameSetup {
   game_id: string;
@@ -79,6 +94,7 @@ export interface GameSetup {
   initial_scenario: string;
   city_management_mode: string;
   owner_intro_event?: NarrativeEvent;
+  owner_intro_response?: NarrativeChoice;
   status: string;
   created_at?: string;
   updated_at?: string;

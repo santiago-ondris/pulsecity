@@ -1,0 +1,661 @@
+.new-game-shell {
+  width: min(1320px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0 48px;
+}
+
+.screen {
+  display: grid;
+  gap: 24px;
+}
+
+.landing-screen {
+  min-height: calc(100vh - 72px);
+  align-content: center;
+}
+
+.landing-hero {
+  max-width: 860px;
+  display: grid;
+  gap: 18px;
+}
+
+.landing-hero h1,
+.step-copy h1,
+.ceremony-topbar h1,
+.franchise-headline h3,
+.panel-header h2,
+.section-title-row h3 {
+  margin: 0;
+  font-family: "Bona Nova SC", serif;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.landing-hero h1 {
+  max-width: 14ch;
+  font-size: clamp(52px, 9vw, 96px);
+  line-height: 0.94;
+}
+
+.landing-copy,
+.step-copy p,
+.copy,
+.microcopy,
+.scenario-card p,
+.management-card p,
+.event-list span,
+.swatch span,
+.metric span,
+.timeline-item p {
+  color: var(--text-muted);
+}
+
+.landing-copy {
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.landing-action {
+  min-width: 220px;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.landing-note,
+.step-card,
+.preview-card,
+.ceremony-map-card,
+.narrative-modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
+.landing-note {
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.landing-note span,
+.eyebrow,
+.field span,
+.metric span,
+.swatch span,
+.dossier-row span,
+.timeline-index {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.landing-note span,
+.setup-step-index,
+.scenario-label,
+.franchise-headline p {
+  color: var(--accent-primary);
+}
+
+.landing-note strong,
+.scenario-card strong,
+.management-card strong,
+.swatch strong,
+.metric strong,
+.dossier-row strong,
+.timeline-item strong {
+  color: var(--text-primary);
+}
+
+.step-screen,
+.ceremony-screen {
+  padding-top: 10px;
+}
+
+.step-copy {
+  max-width: 760px;
+  display: grid;
+  gap: 10px;
+}
+
+.step-copy h1 {
+  max-width: 14ch;
+  font-size: clamp(38px, 7vw, 60px);
+  line-height: 0.98;
+}
+
+.step-copy p,
+.copy {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.step-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.step-card,
+.preview-card,
+.ceremony-map-card {
+  padding: 20px;
+}
+
+.wide-card {
+  max-width: 1040px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 120px;
+  gap: 12px;
+}
+
+.field,
+.field-inline,
+.color-field,
+.color-stack,
+.swatch-row,
+.page-actions,
+.launch-dossier,
+.terrain-band,
+.event-list,
+.ceremony-sidebar {
+  display: grid;
+  gap: 12px;
+}
+
+.field input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.field input:focus {
+  outline: 1px solid var(--accent-primary-border);
+  border-color: var(--accent-primary-border);
+}
+
+.panel-section {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.section-title-row,
+.ceremony-topbar,
+.world-header,
+.narrative-actions,
+.page-actions.split-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.section-title-row {
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.section-title-row h3,
+.panel-header h2 {
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.microcopy {
+  margin: 0;
+  max-width: 28ch;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.color-input-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.color-picker {
+  height: 40px;
+  padding: 0;
+  border-radius: var(--radius-component);
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+}
+
+.preset span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.preset.active {
+  border-color: var(--accent-primary-border);
+}
+
+.scenario-grid,
+.management-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.dual-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scenario-card,
+.management-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--bg-elevated);
+  transition: border-color 160ms ease-out, background 160ms ease-out, transform 160ms ease-out;
+}
+
+.scenario-card:hover,
+.management-card:hover,
+.preset:hover,
+.primary-action:hover,
+.secondary-action:hover {
+  transform: translateY(-1px);
+}
+
+.scenario-card.active,
+.management-card.active {
+  background: var(--accent-primary-bg);
+  border-color: var(--accent-primary-border);
+}
+
+.scenario-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.preview-card {
+  display: grid;
+  gap: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 24%),
+    var(--bg-surface);
+  --franchise-primary: #00c896;
+  --franchise-secondary: #7b8cde;
+  --franchise-accent: #ffaa00;
+}
+
+.franchise-crest {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--franchise-primary), var(--franchise-secondary));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.crest-mark {
+  font-family: "Bona Nova SC", serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0a0a0b;
+}
+
+.franchise-headline {
+  display: grid;
+  gap: 4px;
+}
+
+.franchise-headline p {
+  margin: 0;
+}
+
+.franchise-headline h3 {
+  font-size: 34px;
+  line-height: 1.02;
+}
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch-chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.launch-dossier {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dossier-row {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+}
+
+.launch-status {
+  margin-top: 4px;
+}
+
+.primary-action,
+.secondary-action {
+  padding: 12px 14px;
+  border-radius: var(--radius-component);
+  border: 1px solid transparent;
+}
+
+.primary-action {
+  background: var(--accent-primary);
+  color: #07120f;
+  font-weight: 500;
+}
+
+.secondary-action {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--line);
+}
+
+.primary-action:disabled,
+.secondary-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge-primary {
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary-border);
+}
+
+.badge-info {
+  background: var(--semantic-info-bg);
+  color: var(--semantic-info);
+  border-color: var(--semantic-info-border);
+}
+
+.badge-urgent {
+  background: #ff6b2b16;
+  color: var(--semantic-urgent);
+  border-color: #ff6b2b40;
+}
+
+.ceremony-topbar {
+  align-items: end;
+}
+
+.ceremony-topbar h1 {
+  font-size: clamp(34px, 6vw, 54px);
+  line-height: 0.98;
+}
+
+.ceremony-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
+}
+
+.ceremony-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.ceremony-map-card {
+  display: grid;
+  gap: 16px;
+}
+
+.ceremony-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+}
+
+.world-frame {
+  display: grid;
+  gap: 16px;
+  min-height: 620px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
+.map-grid {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.cell {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--bg-border);
+}
+
+.terrain-water {
+  background: var(--terrain-water);
+}
+
+.terrain-plain {
+  background: var(--terrain-plain);
+}
+
+.terrain-forest {
+  background: var(--terrain-forest);
+}
+
+.terrain-hill {
+  background: var(--terrain-hill);
+}
+
+.zone-residential {
+  box-shadow: inset 0 0 0 1px rgba(240, 240, 240, 0.38);
+}
+
+.zone-commercial {
+  box-shadow: inset 0 0 0 1px var(--semantic-warning);
+}
+
+.zone-industrial {
+  box-shadow: inset 0 0 0 1px var(--semantic-negative);
+}
+
+.zone-park {
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.stadium {
+  position: relative;
+}
+
+.stadium::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border-radius: 2px;
+  background: rgba(240, 240, 240, 0.85);
+  border: 1px solid rgba(10, 10, 11, 0.64);
+}
+
+.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+}
+
+.timeline-item.active {
+  border-color: var(--accent-primary-border);
+  background: var(--accent-primary-bg);
+}
+
+.timeline-item.done .timeline-index {
+  color: var(--accent-primary);
+}
+
+.event-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.event-list li,
+.event-empty {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+}
+
+.event-list strong,
+.event-list span {
+  display: block;
+}
+
+.narrative-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 10, 11, 0.84);
+}
+
+.narrative-modal {
+  width: min(720px, 100%);
+  padding: 24px;
+}
+
+.narrative-body {
+  margin: 18px 0 0;
+  font-family: "Bona Nova SC", serif;
+  font-size: 24px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+@media (max-width: 1120px) {
+  .landing-grid,
+  .ceremony-grid,
+  .step-layout,
+  .launch-dossier,
+  .dual-grid,
+  .ceremony-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .new-game-shell {
+    width: min(100vw - 20px, 100%);
+    padding: 18px 0 32px;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-hero h1,
+  .step-copy h1,
+  .ceremony-topbar h1 {
+    max-width: none;
+  }
+
+  .section-title-row,
+  .ceremony-topbar,
+  .ceremony-badges,
+  .page-actions.split-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

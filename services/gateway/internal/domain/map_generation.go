@@ -26,19 +26,24 @@ type MapGenerationRequest struct {
 }
 
 type GameSetup struct {
-	GameID             string          `json:"game_id"`
-	CityName           string          `json:"city_name"`
-	FranchiseName      string          `json:"franchise_name"`
-	Abbreviation       string          `json:"abbreviation"`
-	PrimaryColor       string          `json:"primary_color"`
-	SecondaryColor     string          `json:"secondary_color"`
-	AccentColor        string          `json:"accent_color"`
-	InitialScenario    string          `json:"initial_scenario"`
-	CityManagementMode string          `json:"city_management_mode"`
-	OwnerIntroEvent    *NarrativeEvent `json:"owner_intro_event,omitempty"`
-	Status             string          `json:"status"`
-	CreatedAt          string          `json:"created_at,omitempty"`
-	UpdatedAt          string          `json:"updated_at,omitempty"`
+	GameID             string           `json:"game_id"`
+	CityName           string           `json:"city_name"`
+	FranchiseName      string           `json:"franchise_name"`
+	Abbreviation       string           `json:"abbreviation"`
+	PrimaryColor       string           `json:"primary_color"`
+	SecondaryColor     string           `json:"secondary_color"`
+	AccentColor        string           `json:"accent_color"`
+	InitialScenario    string           `json:"initial_scenario"`
+	CityManagementMode string           `json:"city_management_mode"`
+	OwnerIntroEvent    *NarrativeEvent  `json:"owner_intro_event,omitempty"`
+	OwnerIntroResponse *NarrativeChoice `json:"owner_intro_response,omitempty"`
+	Status             string           `json:"status"`
+	CreatedAt          string           `json:"created_at,omitempty"`
+	UpdatedAt          string           `json:"updated_at,omitempty"`
+}
+
+type OwnerIntroResponseRequest struct {
+	ChoiceID string `json:"choice_id"`
 }
 
 type NarrativeChoice struct {
@@ -58,6 +63,17 @@ type NarrativeEvent struct {
 	Body     string            `json:"body"`
 	Metadata map[string]string `json:"metadata,omitempty"`
 	Choices  []NarrativeChoice `json:"choices,omitempty"`
+}
+
+type NarrativeResponseEvent struct {
+	Type      string            `json:"type"`
+	Subject   string            `json:"subject"`
+	GameID    string            `json:"game_id"`
+	EventID   string            `json:"event_id"`
+	Choice    NarrativeChoice   `json:"choice"`
+	Emitter   string            `json:"emitter"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	Timestamp string            `json:"timestamp"`
 }
 
 type MapGenerationProgress struct {

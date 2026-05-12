@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS games (
 	city_management_mode TEXT NOT NULL DEFAULT 'owner_influence',
 	status TEXT NOT NULL,
 	owner_intro_event JSONB,
+	owner_intro_response JSONB,
 	current_snapshot JSONB,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -61,6 +62,7 @@ ALTER TABLE games ADD COLUMN IF NOT EXISTS accent_color TEXT NOT NULL DEFAULT ''
 ALTER TABLE games ADD COLUMN IF NOT EXISTS initial_scenario TEXT NOT NULL DEFAULT 'expansion';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS city_management_mode TEXT NOT NULL DEFAULT 'owner_influence';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS owner_intro_event JSONB;
+ALTER TABLE games ADD COLUMN IF NOT EXISTS owner_intro_response JSONB;
 `
 
 	_, err := s.pool.Exec(ctx, query)
@@ -136,6 +138,7 @@ SELECT
 	initial_scenario,
 	city_management_mode,
 	owner_intro_event,
+	owner_intro_response,
 	status,
 	created_at,
 	updated_at
@@ -147,6 +150,7 @@ WHERE game_id = $1;
 	var createdAt time.Time
 	var updatedAt time.Time
 	var ownerIntroRaw []byte
+	var ownerIntroResponseRaw []byte
 	if err := s.pool.QueryRow(ctx, query, gameID).Scan(
 		&game.GameID,
 		&game.CityName,
@@ -158,6 +162,7 @@ WHERE game_id = $1;
 		&game.InitialScenario,
 		&game.CityManagementMode,
 		&ownerIntroRaw,
+		&ownerIntroResponseRaw,
 		&game.Status,
 		&createdAt,
 		&updatedAt,
@@ -177,6 +182,13 @@ WHERE game_id = $1;
 		}
 		game.OwnerIntroEvent = &event
 	}
+	if len(ownerIntroResponseRaw) > 0 {
+		var choice domain.NarrativeChoice
+		if err := json.Unmarshal(ownerIntroResponseRaw, &choice); err != nil {
+			return domain.GameSetup{}, false, fmt.Errorf("unmarshal owner intro response: %w", err)
+		}
+		game.OwnerIntroResponse = &choice
+	}
 
 	return game, true, nil
 }
@@ -190,6 +202,24 @@ func (s *Store) SetOwnerIntroEvent(ctx context.Context, gameID string, event dom
 	const query = `
 UPDATE games
 SET owner_intro_event = $2::jsonb,
+	updated_at = $3
+WHERE game_id = $1;
+`
+
+	_, err = s.pool.Exec(ctx, query, gameID, payload, time.Now().UTC())
+	return err
+}
+
+func (s *Store) SetOwnerIntroResponse(ctx context.Context, gameID string, choice domain.NarrativeChoice) error {
+	payload, err := json.Marshal(choice)
+	if err != nil {
+		return fmt.Errorf("marshal owner intro response: %w", err)
+	}
+
+	const query = `
+UPDATE games
+SET owner_intro_response = $2::jsonb,
+	status = 'owner_intro_answered',
 	updated_at = $3
 WHERE game_id = $1;
 `

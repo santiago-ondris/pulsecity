@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -27,6 +29,7 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /ws", deps.serveWebSocket)
 	mux.HandleFunc("POST /api/v1/games", deps.startGame)
 	mux.HandleFunc("GET /api/v1/games/{gameID}", deps.getGame)
+	mux.HandleFunc("POST /api/v1/games/{gameID}/owner-intro-response", deps.answerOwnerIntro)
 	mux.HandleFunc("GET /api/v1/games/{gameID}/snapshot", deps.getSnapshot)
 }
 
@@ -176,6 +179,87 @@ func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
+	gameID := r.PathValue("gameID")
+	if gameID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing game id",
+		})
+		return
+	}
+
+	game, found, err := d.Store.GetGame(r.Context(), gameID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load game",
+		})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "game not found",
+		})
+		return
+	}
+	if game.OwnerIntroEvent == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "owner intro event not available yet",
+		})
+		return
+	}
+	if game.OwnerIntroResponse != nil {
+		writeJSON(w, http.StatusOK, game.OwnerIntroResponse)
+		return
+	}
+
+	var request domain.OwnerIntroResponseRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&request)
+	}
+
+	choice, ok := findNarrativeChoice(game.OwnerIntroEvent.Choices, request.ChoiceID)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid owner intro choice",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := d.Store.SetOwnerIntroResponse(ctx, gameID, choice); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to persist owner intro response",
+		})
+		return
+	}
+
+	responseEvent := domain.NarrativeResponseEvent{
+		Type:    "narrative.response",
+		Subject: "narrativa.respuesta_gm",
+		GameID:  gameID,
+		EventID: game.OwnerIntroEvent.EventID,
+		Choice:  choice,
+		Emitter: "gm",
+		Metadata: map[string]string{
+			"city_name":            game.CityName,
+			"franchise_name":       game.FranchiseName,
+			"initial_scenario":     game.InitialScenario,
+			"city_management_mode": game.CityManagementMode,
+		},
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := d.Bus.PublishJSON("narrativa.respuesta_gm", responseEvent); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "failed to publish owner intro response",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, choice)
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -229,6 +313,16 @@ func normalizeCityManagementMode(value string) string {
 	default:
 		return "owner_influence"
 	}
+}
+
+func findNarrativeChoice(choices []domain.NarrativeChoice, choiceID string) (domain.NarrativeChoice, bool) {
+	for _, choice := range choices {
+		if choice.ID == choiceID {
+			return choice, true
+		}
+	}
+
+	return domain.NarrativeChoice{}, false
 }
 
 const debugHTML = `<!DOCTYPE html>

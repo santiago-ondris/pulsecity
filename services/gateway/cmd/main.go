@@ -167,7 +167,9 @@ func buildOwnerIntroEvent(game domain.GameSetup) domain.NarrativeEvent {
 			"city_management_mode": game.CityManagementMode,
 		},
 		Choices: []domain.NarrativeChoice{
-			{ID: "continue", Label: "Entendido"},
+			{ID: "build_culture", Label: "Empezá por identidad y cultura"},
+			{ID: "win_now", Label: "Acelerá para competir rapido"},
+			{ID: "city_first", Label: "Usá la franquicia para activar la ciudad"},
 		},
 	}
 }
