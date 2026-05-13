@@ -1,4 +1,5 @@
 import type { CityManagementModeId, FlowPage, ScenarioId } from "./constants";
+import type { GameSummary } from "../../types";
 
 export interface NewGameDraft {
   cityName: string;
@@ -14,4 +15,9 @@ export interface NewGameDraft {
 export interface FlowProgress {
   currentPage: FlowPage;
   unlockedPage: FlowPage;
+}
+
+export interface GuestAccessState {
+  guestToken: string;
+  games: GameSummary[];
 }

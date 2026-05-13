@@ -27,7 +27,9 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /", debugPage)
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.HandleFunc("GET /ws", deps.serveWebSocket)
+	mux.HandleFunc("POST /api/v1/guest-sessions", deps.createGuestSession)
 	mux.HandleFunc("POST /api/v1/games", deps.startGame)
+	mux.HandleFunc("GET /api/v1/games", deps.listGames)
 	mux.HandleFunc("GET /api/v1/games/{gameID}", deps.getGame)
 	mux.HandleFunc("POST /api/v1/games/{gameID}/owner-intro-response", deps.answerOwnerIntro)
 	mux.HandleFunc("GET /api/v1/games/{gameID}/snapshot", deps.getSnapshot)
@@ -47,8 +49,17 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 
 func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 	gameID := r.URL.Query().Get("game_id")
+	guestToken := strings.TrimSpace(r.URL.Query().Get("guest_token"))
 	d.Hub.ServeWebSocket(w, r, func(conn *websocket.Conn) error {
 		if gameID == "" {
+			return nil
+		}
+
+		game, found, err := d.Store.GetGame(r.Context(), gameID)
+		if err != nil {
+			return err
+		}
+		if !found || !guestOwnsGame(guestToken, game) {
 			return nil
 		}
 
@@ -74,6 +85,11 @@ func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
+	guestToken, ok := d.requireGuestToken(w, r)
+	if !ok {
+		return
+	}
+
 	var request domain.StartGameRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&request)
@@ -86,6 +102,7 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 
 	setup := domain.GameSetup{
 		GameID:             command.GameID,
+		GuestToken:         guestToken,
 		CityName:           normalizeText(request.CityName, "Nueva Aurora"),
 		FranchiseName:      normalizeText(request.FranchiseName, "Lighthouses"),
 		Abbreviation:       normalizeAbbreviation(request.Abbreviation),
@@ -118,7 +135,54 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (d Dependencies) createGuestSession(w http.ResponseWriter, r *http.Request) {
+	token := "guest_" + uuid.NewString()
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := d.Store.CreateGuestSession(ctx, token); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to create guest session",
+		})
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	writeJSON(w, http.StatusCreated, domain.GuestSession{
+		GuestToken: token,
+		CreatedAt:  now,
+		LastSeenAt: now,
+	})
+}
+
+func (d Dependencies) listGames(w http.ResponseWriter, r *http.Request) {
+	guestToken, ok := d.requireGuestToken(w, r)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	games, err := d.Store.ListGamesByGuest(ctx, guestToken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to list games",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"games": games,
+	})
+}
+
 func (d Dependencies) getGame(w http.ResponseWriter, r *http.Request) {
+	guestToken, ok := d.requireGuestToken(w, r)
+	if !ok {
+		return
+	}
+
 	gameID := r.PathValue("gameID")
 	if gameID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -140,15 +204,40 @@ func (d Dependencies) getGame(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if !guestOwnsGame(guestToken, game) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "game not found",
+		})
+		return
+	}
 
 	writeJSON(w, http.StatusOK, game)
 }
 
 func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
+	guestToken, ok := d.requireGuestToken(w, r)
+	if !ok {
+		return
+	}
+
 	gameID := r.PathValue("gameID")
 	if gameID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "missing game id",
+		})
+		return
+	}
+
+	game, found, err := d.Store.GetGame(r.Context(), gameID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load game",
+		})
+		return
+	}
+	if !found || !guestOwnsGame(guestToken, game) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "snapshot not found",
 		})
 		return
 	}
@@ -180,6 +269,11 @@ func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
+	guestToken, ok := d.requireGuestToken(w, r)
+	if !ok {
+		return
+	}
+
 	gameID := r.PathValue("gameID")
 	if gameID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -196,6 +290,12 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "game not found",
+		})
+		return
+	}
+	if !guestOwnsGame(guestToken, game) {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "game not found",
 		})
@@ -258,6 +358,43 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, choice)
+}
+
+func (d Dependencies) requireGuestToken(w http.ResponseWriter, r *http.Request) (string, bool) {
+	token := guestTokenFromRequest(r)
+	if token == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "missing guest token",
+		})
+		return "", false
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	ok, err := d.Store.TouchGuestSession(ctx, token)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to validate guest token",
+		})
+		return "", false
+	}
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "invalid guest token",
+		})
+		return "", false
+	}
+
+	return token, true
+}
+
+func guestTokenFromRequest(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Guest-Token"))
+}
+
+func guestOwnsGame(guestToken string, game domain.GameSetup) bool {
+	return guestToken != "" && game.GuestToken == guestToken
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

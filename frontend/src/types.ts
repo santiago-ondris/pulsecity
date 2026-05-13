@@ -83,6 +83,22 @@ export type RealtimeEvent =
   | NarrativeEvent
   | NarrativeResponseEvent;
 
+export interface GuestSession {
+  guest_token: string;
+  created_at?: string;
+  last_seen_at?: string;
+}
+
+export interface GameSummary {
+  game_id: string;
+  city_name: string;
+  franchise_name: string;
+  initial_scenario: string;
+  city_management_mode: string;
+  status: string;
+  updated_at: string;
+}
+
 export interface GameSetup {
   game_id: string;
   city_name: string;

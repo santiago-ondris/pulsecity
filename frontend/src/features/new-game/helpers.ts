@@ -67,7 +67,7 @@ export function gridColumns(width: number): CSSProperties {
   };
 }
 
-export function managementModeLabel(value: CityManagementModeId) {
+export function managementModeLabel(value: CityManagementModeId | string) {
   return cityManagementModes.find((mode) => mode.id === value)?.label ?? "Dueño con influencia";
 }
 

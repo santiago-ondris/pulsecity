@@ -72,6 +72,15 @@
   gap: 16px;
 }
 
+.guest-session-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(0, 200, 150, 0.05), transparent 28%), var(--bg-surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
 .landing-note,
 .step-card,
 .preview-card,
@@ -86,6 +95,53 @@
   padding: 18px;
   display: grid;
   gap: 10px;
+}
+
+.guest-empty-state,
+.guest-game-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+}
+
+.guest-empty-state {
+  display: grid;
+  gap: 6px;
+}
+
+.guest-empty-state strong,
+.guest-game-card h3,
+.guest-game-meta {
+  margin: 0;
+}
+
+.guest-game-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.guest-game-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.guest-game-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.guest-game-actions span,
+.guest-game-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .landing-note span,
@@ -654,8 +710,13 @@
   .section-title-row,
   .ceremony-topbar,
   .ceremony-badges,
-  .page-actions.split-actions {
+  .page-actions.split-actions,
+  .guest-game-card {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .guest-game-actions {
+    justify-items: stretch;
   }
 }

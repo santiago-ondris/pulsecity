@@ -14,7 +14,18 @@ export function NewGameFlow() {
 
   return (
     <main className="new-game-shell">
-      {flow.currentPage === "home" ? <LandingPage onStart={flow.startNewGame} /> : null}
+      {flow.currentPage === "home" ? (
+        <LandingPage
+          creatingGuestSession={flow.creatingGuestSession}
+          guestGames={flow.guestGames}
+          guestReady={flow.guestReady}
+          guestToken={flow.guestToken}
+          status={flow.status}
+          onContinueGame={(gameId) => void flow.continueGame(gameId)}
+          onCreateGuestSession={() => void flow.createGuestSession()}
+          onStart={flow.startNewGame}
+        />
+      ) : null}
 
       {flow.currentPage === "identity" ? (
         <IdentityPage

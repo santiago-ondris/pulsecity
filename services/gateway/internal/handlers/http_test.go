@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	"github.com/pulsecity/services/gateway/internal/domain"
@@ -22,5 +23,29 @@ func TestFindNarrativeChoice(t *testing.T) {
 
 	if _, ok := findNarrativeChoice(choices, "missing"); ok {
 		t.Fatal("expected missing choice lookup to fail")
+	}
+}
+
+func TestGuestTokenFromRequest(t *testing.T) {
+	request := httptest.NewRequest("GET", "/api/v1/games", nil)
+	request.Header.Set("X-Guest-Token", " guest_123 ")
+
+	token := guestTokenFromRequest(request)
+	if token != "guest_123" {
+		t.Fatalf("unexpected guest token %q", token)
+	}
+}
+
+func TestGuestOwnsGame(t *testing.T) {
+	game := domain.GameSetup{GameID: "game-1", GuestToken: "guest_123"}
+
+	if !guestOwnsGame("guest_123", game) {
+		t.Fatal("expected matching guest to own game")
+	}
+	if guestOwnsGame("guest_other", game) {
+		t.Fatal("expected guest mismatch to fail ownership check")
+	}
+	if guestOwnsGame("", game) {
+		t.Fatal("expected empty guest token to fail ownership check")
 	}
 }

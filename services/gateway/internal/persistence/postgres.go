@@ -36,8 +36,15 @@ func (s *Store) Close() {
 
 func (s *Store) EnsureSchema(ctx context.Context) error {
 	const query = `
+CREATE TABLE IF NOT EXISTS guest_sessions (
+	guest_token TEXT PRIMARY KEY,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS games (
 	game_id TEXT PRIMARY KEY,
+	guest_token TEXT NOT NULL DEFAULT '',
 	city_name TEXT NOT NULL DEFAULT '',
 	franchise_name TEXT NOT NULL DEFAULT '',
 	abbreviation TEXT NOT NULL DEFAULT '',
@@ -54,6 +61,9 @@ CREATE TABLE IF NOT EXISTS games (
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_games_guest_token_updated_at ON games (guest_token, updated_at DESC);
+
+ALTER TABLE games ADD COLUMN IF NOT EXISTS guest_token TEXT NOT NULL DEFAULT '';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS franchise_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS abbreviation TEXT NOT NULL DEFAULT '';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS primary_color TEXT NOT NULL DEFAULT '';
@@ -69,10 +79,39 @@ ALTER TABLE games ADD COLUMN IF NOT EXISTS owner_intro_response JSONB;
 	return err
 }
 
+func (s *Store) CreateGuestSession(ctx context.Context, token string) error {
+	const query = `
+INSERT INTO guest_sessions (guest_token, created_at, last_seen_at)
+VALUES ($1, $2, $2)
+ON CONFLICT (guest_token) DO UPDATE
+SET last_seen_at = EXCLUDED.last_seen_at;
+`
+
+	now := time.Now().UTC()
+	_, err := s.pool.Exec(ctx, query, token, now)
+	return err
+}
+
+func (s *Store) TouchGuestSession(ctx context.Context, token string) (bool, error) {
+	const query = `
+UPDATE guest_sessions
+SET last_seen_at = $2
+WHERE guest_token = $1;
+`
+
+	commandTag, err := s.pool.Exec(ctx, query, token, time.Now().UTC())
+	if err != nil {
+		return false, err
+	}
+
+	return commandTag.RowsAffected() > 0, nil
+}
+
 func (s *Store) CreateGame(ctx context.Context, setup domain.GameSetup) error {
 	const query = `
 INSERT INTO games (
 	game_id,
+	guest_token,
 	city_name,
 	franchise_name,
 	abbreviation,
@@ -84,7 +123,7 @@ INSERT INTO games (
 	owner_intro_event,
 	status
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11)
 ON CONFLICT (game_id) DO NOTHING;
 `
 
@@ -92,6 +131,7 @@ ON CONFLICT (game_id) DO NOTHING;
 		ctx,
 		query,
 		setup.GameID,
+		setup.GuestToken,
 		setup.CityName,
 		setup.FranchiseName,
 		setup.Abbreviation,
@@ -129,6 +169,7 @@ func (s *Store) GetGame(ctx context.Context, gameID string) (domain.GameSetup, b
 	const query = `
 SELECT
 	game_id,
+	guest_token,
 	city_name,
 	franchise_name,
 	abbreviation,
@@ -153,6 +194,7 @@ WHERE game_id = $1;
 	var ownerIntroResponseRaw []byte
 	if err := s.pool.QueryRow(ctx, query, gameID).Scan(
 		&game.GameID,
+		&game.GuestToken,
 		&game.CityName,
 		&game.FranchiseName,
 		&game.Abbreviation,
@@ -191,6 +233,54 @@ WHERE game_id = $1;
 	}
 
 	return game, true, nil
+}
+
+func (s *Store) ListGamesByGuest(ctx context.Context, guestToken string) ([]domain.GameSummary, error) {
+	const query = `
+SELECT
+	game_id,
+	city_name,
+	franchise_name,
+	initial_scenario,
+	city_management_mode,
+	status,
+	updated_at
+FROM games
+WHERE guest_token = $1
+ORDER BY updated_at DESC;
+`
+
+	rows, err := s.pool.Query(ctx, query, guestToken)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	summaries := make([]domain.GameSummary, 0)
+	for rows.Next() {
+		var summary domain.GameSummary
+		var updatedAt time.Time
+		if err := rows.Scan(
+			&summary.GameID,
+			&summary.CityName,
+			&summary.FranchiseName,
+			&summary.InitialScenario,
+			&summary.CityManagementMode,
+			&summary.Status,
+			&updatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		summary.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+		summaries = append(summaries, summary)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return summaries, nil
 }
 
 func (s *Store) SetOwnerIntroEvent(ctx context.Context, gameID string, event domain.NarrativeEvent) error {

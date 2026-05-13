@@ -20,6 +20,12 @@ type StartGameRequest struct {
 	CityManagementMode string `json:"city_management_mode"`
 }
 
+type GuestSession struct {
+	GuestToken string `json:"guest_token"`
+	CreatedAt  string `json:"created_at,omitempty"`
+	LastSeenAt string `json:"last_seen_at,omitempty"`
+}
+
 type MapGenerationRequest struct {
 	GameID   string `json:"game_id"`
 	CityName string `json:"city_name,omitempty"`
@@ -27,6 +33,7 @@ type MapGenerationRequest struct {
 
 type GameSetup struct {
 	GameID             string           `json:"game_id"`
+	GuestToken         string           `json:"-"`
 	CityName           string           `json:"city_name"`
 	FranchiseName      string           `json:"franchise_name"`
 	Abbreviation       string           `json:"abbreviation"`
@@ -40,6 +47,16 @@ type GameSetup struct {
 	Status             string           `json:"status"`
 	CreatedAt          string           `json:"created_at,omitempty"`
 	UpdatedAt          string           `json:"updated_at,omitempty"`
+}
+
+type GameSummary struct {
+	GameID             string `json:"game_id"`
+	CityName           string `json:"city_name"`
+	FranchiseName      string `json:"franchise_name"`
+	InitialScenario    string `json:"initial_scenario"`
+	CityManagementMode string `json:"city_management_mode"`
+	Status             string `json:"status"`
+	UpdatedAt          string `json:"updated_at"`
 }
 
 type OwnerIntroResponseRequest struct {
