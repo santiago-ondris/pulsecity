@@ -4,6 +4,7 @@ import type {
   GameSetup,
   GameSummary,
   GuestSession,
+  GuestUpgradeResult,
   MapClientState,
   NarrativeChoice,
   NarrativeEvent,
@@ -38,6 +39,7 @@ export function useNewGameFlow() {
   const [currentPage, setCurrentPage] = useState<FlowPage>("home");
   const [unlockedPage, setUnlockedPage] = useState<FlowPage>("home");
   const [gameId, setGameId] = useState("");
+  const [selectedGameId, setSelectedGameId] = useState("");
   const [guestToken, setGuestToken] = useState("");
   const [userSession, setUserSession] = useState<UserSession | null>(null);
   const [games, setGames] = useState<GameSummary[]>([]);
@@ -51,6 +53,7 @@ export function useNewGameFlow() {
   const [creatingGame, setCreatingGame] = useState(false);
   const [creatingGuestSession, setCreatingGuestSession] = useState(false);
   const [authenticatingUser, setAuthenticatingUser] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(true);
   const socketRef = useRef<WebSocket | null>(null);
   const activeGameIdRef = useRef("");
 
@@ -73,6 +76,17 @@ export function useNewGameFlow() {
   useEffect(() => {
     activeGameIdRef.current = gameId;
   }, [gameId]);
+
+  useEffect(() => {
+    if (games.length === 0) {
+      setSelectedGameId("");
+      return;
+    }
+
+    if (!games.some((game) => game.game_id === selectedGameId)) {
+      setSelectedGameId(games[0].game_id);
+    }
+  }, [games, selectedGameId]);
 
   useEffect(() => {
     void restoreAuthState();
@@ -246,6 +260,7 @@ export function useNewGameFlow() {
   }
 
   async function restoreAuthState() {
+    setRestoringSession(true);
     const storedGuestToken = window.localStorage.getItem(guestTokenStorageKey) ?? "";
     const storedSessionToken = window.localStorage.getItem(sessionTokenStorageKey) ?? "";
 
@@ -256,13 +271,19 @@ export function useNewGameFlow() {
     if (storedSessionToken) {
       const restored = await restoreUserSession(storedSessionToken);
       if (restored) {
-        return
+        setRestoringSession(false);
+        return;
       }
     }
 
     if (storedGuestToken) {
-      await loadGamesForGuest(storedGuestToken);
+      await loadGamesForGuest(storedGuestToken, { silentOnSuccess: true });
+      setStatus("Sesión invitada restaurada.");
+    } else {
+      setStatus("Elegí cómo entrar a PulseCity.");
     }
+
+    setRestoringSession(false);
   }
 
   async function restoreUserSession(sessionToken: string) {
@@ -274,22 +295,34 @@ export function useNewGameFlow() {
       });
       const payload = (await response.json()) as UserSession | { error?: string };
       if (!response.ok || !("session_token" in payload)) {
-        clearUserSession();
+        clearUserSession({ preserveGuestFallback: true, resetNavigation: false });
         return false;
       }
 
       setUserSession(payload);
+      await loadGamesForUser(payload.session_token, { silentOnSuccess: true });
       setStatus(`Sesión restaurada para ${payload.user.display_name}.`);
-      await loadGamesForUser(payload.session_token);
       return true;
     } catch {
-      clearUserSession();
+      clearUserSession({ preserveGuestFallback: true, resetNavigation: false });
       return false;
     }
   }
 
   async function register(email: string, displayName: string, password: string) {
     if (authenticatingUser) {
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedDisplayName = displayName.trim();
+    const registrationError = validateRegistrationInput(
+      normalizedEmail,
+      normalizedDisplayName,
+      password,
+    );
+    if (registrationError) {
+      setStatus(registrationError);
       return;
     }
 
@@ -303,8 +336,8 @@ export function useNewGameFlow() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
-          display_name: displayName,
+          email: normalizedEmail,
+          display_name: normalizedDisplayName,
           password,
         }),
       });
@@ -316,8 +349,14 @@ export function useNewGameFlow() {
 
       window.localStorage.setItem(sessionTokenStorageKey, payload.session_token);
       setUserSession(payload);
-      setStatus(`Cuenta creada. Sesión iniciada como ${payload.user.display_name}.`);
+      const upgradeMessage = await upgradeGuestOwnership(payload);
+      if (!upgradeMessage) {
+        setStatus(`Cuenta creada. Sesión iniciada como ${payload.user.display_name}.`);
+      }
       await loadGamesForUser(payload.session_token);
+      if (upgradeMessage) {
+        setStatus(upgradeMessage);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Fallo de red al crear la cuenta.");
     } finally {
@@ -327,6 +366,13 @@ export function useNewGameFlow() {
 
   async function login(email: string, password: string) {
     if (authenticatingUser) {
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const loginError = validateLoginInput(normalizedEmail, password);
+    if (loginError) {
+      setStatus(loginError);
       return;
     }
 
@@ -340,7 +386,7 @@ export function useNewGameFlow() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
+          email: normalizedEmail,
           password,
         }),
       });
@@ -352,8 +398,14 @@ export function useNewGameFlow() {
 
       window.localStorage.setItem(sessionTokenStorageKey, payload.session_token);
       setUserSession(payload);
-      setStatus(`Sesión iniciada como ${payload.user.display_name}.`);
+      const upgradeMessage = await upgradeGuestOwnership(payload);
+      if (!upgradeMessage) {
+        setStatus(`Sesión iniciada como ${payload.user.display_name}.`);
+      }
       await loadGamesForUser(payload.session_token);
+      if (upgradeMessage) {
+        setStatus(upgradeMessage);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Fallo de red al iniciar sesión.");
     } finally {
@@ -466,6 +518,90 @@ export function useNewGameFlow() {
     connectSocket(nextGameId);
   }
 
+  function continueSelectedGame() {
+    if (!selectedGameId) {
+      setStatus("Elegí una partida para continuar.");
+      return;
+    }
+
+    void continueGame(selectedGameId);
+  }
+
+  async function switchToGuestSession() {
+    if (!guestToken) {
+      setStatus("No hay una sesión invitada guardada para activar.");
+      return;
+    }
+
+    resetRuntimeToHome();
+    window.localStorage.removeItem(sessionTokenStorageKey);
+    setUserSession(null);
+    setStatus("Volviendo al perfil invitado...");
+    await loadGamesForGuest(guestToken);
+  }
+
+  async function logoutUser() {
+    if (!userSession) {
+      return;
+    }
+
+    resetRuntimeToHome();
+    window.localStorage.removeItem(sessionTokenStorageKey);
+    setUserSession(null);
+
+    if (guestToken) {
+      setStatus("Sesión de cuenta cerrada. Volviendo al invitado guardado...");
+      await loadGamesForGuest(guestToken);
+      return;
+    }
+
+    setStatus("Sesión cerrada. Elegí cómo entrar a PulseCity.");
+  }
+
+  function clearAllAccess() {
+    resetRuntimeToHome();
+    clearGuestSessionStorage();
+    window.localStorage.removeItem(sessionTokenStorageKey);
+    setGuestToken("");
+    setUserSession(null);
+    setGames([]);
+    setSelectedGameId("");
+    setStatus("Sesiones locales limpiadas. Elegí cómo entrar a PulseCity.");
+  }
+
+  async function upgradeGuestOwnership(nextSession: UserSession) {
+    if (!guestToken) {
+      return "";
+    }
+
+    try {
+      const response = await fetch(`${gatewayBaseUrl}/api/v1/auth/upgrade-guest`, {
+        method: "POST",
+        headers: {
+          "X-Guest-Token": guestToken,
+          "X-Session-Token": nextSession.session_token,
+        },
+      });
+      const payload = (await response.json()) as GuestUpgradeResult | { error?: string };
+      if (!response.ok || !("migrated_games" in payload)) {
+        setStatus(
+          ("error" in payload && payload.error) ||
+            "La cuenta se creó, pero no se pudieron migrar las partidas invitadas.",
+        );
+        return "";
+      }
+
+      clearGuestSessionStorage();
+      setGuestToken("");
+      return payload.migrated_games > 0
+        ? `Sesión iniciada como ${nextSession.user.display_name}. Se migraron ${payload.migrated_games} partida(s) del invitado actual.`
+        : `Sesión iniciada como ${nextSession.user.display_name}. No había partidas guest para migrar.`;
+    } catch {
+      setStatus("La cuenta quedó autenticada, pero falló la migración de partidas guest.");
+      return "";
+    }
+  }
+
   async function loadGames() {
     if (userSession?.session_token) {
       return loadGamesForUser(userSession.session_token);
@@ -477,7 +613,10 @@ export function useNewGameFlow() {
     return false;
   }
 
-  async function loadGamesForGuest(nextGuestToken: string) {
+  async function loadGamesForGuest(
+    nextGuestToken: string,
+    options?: { silentOnSuccess?: boolean },
+  ) {
     try {
       const response = await fetch(`${gatewayBaseUrl}/api/v1/games`, {
         headers: buildAuthHeaders({
@@ -488,25 +627,30 @@ export function useNewGameFlow() {
       const payload = (await response.json()) as { games?: GameSummary[]; error?: string };
       if (!response.ok || !payload.games) {
         if (response.status === 401 && !userSession) {
-          clearGuestSession();
+          clearGuestSession({ resetNavigation: false });
           setStatus("La sesión invitada ya no es válida. Creá una nueva para continuar.");
         }
         return false;
       }
 
       setGames(payload.games);
-      setStatus(
-        payload.games.length === 0
-          ? "Sesión invitada lista. Todavía no hay partidas asociadas."
-          : `Sesión invitada lista. ${payload.games.length} partida(s) asociada(s).`,
-      );
+      if (!options?.silentOnSuccess) {
+        setStatus(
+          payload.games.length === 0
+            ? "Sesión invitada lista. Todavía no hay partidas asociadas."
+            : `Sesión invitada lista. ${payload.games.length} partida(s) asociada(s).`,
+        );
+      }
       return true;
     } catch {
       return false;
     }
   }
 
-  async function loadGamesForUser(sessionToken: string) {
+  async function loadGamesForUser(
+    sessionToken: string,
+    options?: { silentOnSuccess?: boolean },
+  ) {
     try {
       const response = await fetch(`${gatewayBaseUrl}/api/v1/games`, {
         headers: buildAuthHeaders({
@@ -517,18 +661,20 @@ export function useNewGameFlow() {
       const payload = (await response.json()) as { games?: GameSummary[]; error?: string };
       if (!response.ok || !payload.games) {
         if (response.status === 401) {
-          clearUserSession();
+          clearUserSession({ preserveGuestFallback: true, resetNavigation: false });
           setStatus("La sesión autenticada dejó de ser válida.");
         }
         return false;
       }
 
       setGames(payload.games);
-      setStatus(
-        payload.games.length === 0
-          ? "Sesión autenticada lista. Todavía no hay partidas asociadas."
-          : `Sesión autenticada lista. ${payload.games.length} partida(s) asociada(s).`,
-      );
+      if (!options?.silentOnSuccess) {
+        setStatus(
+          payload.games.length === 0
+            ? "Sesión autenticada lista. Todavía no hay partidas asociadas."
+            : `Sesión autenticada lista. ${payload.games.length} partida(s) asociada(s).`,
+        );
+      }
       return true;
     } catch {
       return false;
@@ -548,10 +694,10 @@ export function useNewGameFlow() {
       if (!response.ok || !("game_id" in payload)) {
         if (response.status === 401) {
           if (userSession) {
-            clearUserSession();
+            clearUserSession({ preserveGuestFallback: true, resetNavigation: true });
             setStatus("La sesión autenticada dejó de ser válida.");
           } else {
-            clearGuestSession();
+            clearGuestSession({ resetNavigation: true });
             setStatus("La sesión invitada dejó de ser válida.");
           }
         }
@@ -639,30 +785,48 @@ export function useNewGameFlow() {
     }
   }
 
-  function clearGuestSession() {
-    window.localStorage.removeItem(guestTokenStorageKey);
+  function clearGuestSession(options?: { resetNavigation?: boolean }) {
+    clearGuestSessionStorage();
     setGuestToken("");
     if (!userSession) {
-      setGames([]);
-      setUnlockedPage("home");
-      setGameId("");
+      resetRuntimeToHome();
+      if (options?.resetNavigation !== false) {
+        syncPage("home", true);
+      }
     }
   }
 
-  function clearUserSession() {
+  function clearUserSession(options?: { preserveGuestFallback?: boolean; resetNavigation?: boolean }) {
     window.localStorage.removeItem(sessionTokenStorageKey);
     setUserSession(null);
-    if (guestToken) {
-      void loadGamesForGuest(guestToken);
+    if (options?.preserveGuestFallback && guestToken) {
+      resetRuntimeToHome();
+      void loadGamesForGuest(guestToken, { silentOnSuccess: true });
       return;
     }
 
+    resetRuntimeToHome();
+    if (options?.resetNavigation !== false) {
+      syncPage("home", true);
+    }
+  }
+
+  function resetRuntimeToHome() {
+    socketRef.current?.close();
     setGames([]);
+    setSelectedGameId("");
     setUnlockedPage("home");
     setGameId("");
+    setMapState(initialMapState);
+    setEvents([]);
+    setActiveNarrativeEvent(null);
+    setOwnerIntroResponse(null);
+    setSocketStatus("Socket inactivo");
+    syncPage("home", true);
   }
 
   const currentStage = stageMeta[mapState.stage] ?? stageMeta.idle;
+  const selectedGame = games.find((game) => game.game_id === selectedGameId) ?? null;
 
   return {
     activeAuthKind,
@@ -679,23 +843,35 @@ export function useNewGameFlow() {
     guestToken,
     mapState,
     ownerIntroResponse,
+    restoringSession,
+    selectedGame,
+    selectedGameId,
     socketStatus,
     status,
     submittingNarrativeChoice,
     userSession,
     updateDraft,
+    continueSelectedGame,
     continueGame,
     createGame,
     createGuestSession,
+    clearAllAccess,
     completeIdentityStep,
     completeManagementStep,
     completeScenarioStep,
     goBack,
     login,
+    logoutUser,
     register,
+    setSelectedGameId,
     startNewGame,
+    switchToGuestSession,
     submitOwnerIntroChoice,
   };
+}
+
+function clearGuestSessionStorage() {
+  window.localStorage.removeItem(guestTokenStorageKey);
 }
 
 function buildAuthHeaders({
@@ -743,4 +919,47 @@ function isScenarioId(value: string): value is ScenarioId {
 
 function isCityManagementModeId(value: string): value is CityManagementModeId {
   return ["owner_influence", "dual_figure"].includes(value);
+}
+
+function validateRegistrationInput(email: string, displayName: string, password: string) {
+  if (!email) {
+    return "Necesitás un email para crear la cuenta.";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "El formato del email no es válido.";
+  }
+  if (!displayName) {
+    return "Necesitás un nombre visible para la cuenta.";
+  }
+  if (displayName.length < 3) {
+    return "El nombre visible debe tener al menos 3 caracteres.";
+  }
+  if (displayName.length > 40) {
+    return "El nombre visible no puede superar los 40 caracteres.";
+  }
+  if (!password) {
+    return "Necesitás una contraseña para crear la cuenta.";
+  }
+  if (password.length < 8) {
+    return "La contraseña debe tener al menos 8 caracteres.";
+  }
+  if (password.length > 72) {
+    return "La contraseña no puede superar los 72 caracteres.";
+  }
+
+  return "";
+}
+
+function validateLoginInput(email: string, password: string) {
+  if (!email) {
+    return "Necesitás un email para iniciar sesión.";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "El formato del email no es válido.";
+  }
+  if (!password) {
+    return "Necesitás una contraseña para iniciar sesión.";
+  }
+
+  return "";
 }

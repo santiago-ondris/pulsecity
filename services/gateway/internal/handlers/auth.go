@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -29,9 +31,9 @@ func (d Dependencies) register(w http.ResponseWriter, r *http.Request) {
 	displayName := strings.TrimSpace(request.DisplayName)
 	password := request.Password
 
-	if email == "" || displayName == "" || len(password) < 8 {
+	if err := validateRegistrationInput(email, displayName, password); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "email, display_name y password de al menos 8 caracteres son obligatorios",
+			"error": err.Error(),
 		})
 		return
 	}
@@ -83,11 +85,19 @@ func (d Dependencies) login(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&request)
 	}
+	email := strings.ToLower(strings.TrimSpace(request.Email))
+	password := request.Password
+	if err := validateLoginInput(email, password); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
-	user, passwordHash, found, err := d.Store.GetUserCredentialsByEmail(ctx, request.Email)
+	user, passwordHash, found, err := d.Store.GetUserCredentialsByEmail(ctx, email)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to load user",
@@ -153,6 +163,76 @@ func (d Dependencies) getCurrentSession(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, session)
+}
+
+func (d Dependencies) upgradeGuest(w http.ResponseWriter, r *http.Request) {
+	sessionToken := sessionTokenFromRequest(r)
+	guestToken := guestTokenFromRequest(r)
+	if sessionToken == "" || guestToken == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "session token and guest token are required",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	guestOK, err := d.Store.TouchGuestSession(ctx, guestToken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to validate guest token",
+		})
+		return
+	}
+	if !guestOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "invalid guest token",
+		})
+		return
+	}
+
+	sessionOK, err := d.Store.TouchUserSession(ctx, sessionToken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to validate session token",
+		})
+		return
+	}
+	if !sessionOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "invalid session token",
+		})
+		return
+	}
+
+	session, found, err := d.Store.GetUserSession(ctx, sessionToken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load user session",
+		})
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "invalid session token",
+		})
+		return
+	}
+
+	migratedGames, err := d.Store.MigrateGuestGamesToUser(ctx, guestToken, session.User.UserID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to upgrade guest games",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, domain.GuestUpgradeResult{
+		UserSession:    session,
+		MigratedGames:  migratedGames,
+		GuestTokenUsed: guestToken,
+	})
 }
 
 func (d Dependencies) requireActor(w http.ResponseWriter, r *http.Request) (actor, bool) {
@@ -244,4 +324,47 @@ func gameOwnedBy(currentActor actor, game domain.GameSetup) bool {
 	}
 
 	return currentActor.guestToken != "" && game.GuestToken == currentActor.guestToken
+}
+
+func validateRegistrationInput(email, displayName, password string) error {
+	if email == "" {
+		return errors.New("email is required")
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		return errors.New("email format is invalid")
+	}
+	if displayName == "" {
+		return errors.New("display_name is required")
+	}
+	if len([]rune(displayName)) < 3 {
+		return errors.New("display_name must be at least 3 characters")
+	}
+	if len([]rune(displayName)) > 40 {
+		return errors.New("display_name must be 40 characters or fewer")
+	}
+	if strings.TrimSpace(password) == "" {
+		return errors.New("password is required")
+	}
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	if len(password) > 72 {
+		return errors.New("password must be 72 characters or fewer")
+	}
+
+	return nil
+}
+
+func validateLoginInput(email, password string) error {
+	if email == "" {
+		return errors.New("email is required")
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		return errors.New("email format is invalid")
+	}
+	if password == "" {
+		return errors.New("password is required")
+	}
+
+	return nil
 }

@@ -21,13 +21,20 @@ export function NewGameFlow() {
           creatingGuestSession={flow.creatingGuestSession}
           games={flow.games}
           guestToken={flow.guestToken}
+          restoringSession={flow.restoringSession}
+          selectedGame={flow.selectedGame}
+          selectedGameId={flow.selectedGameId}
           status={flow.status}
-          onContinueGame={(gameId) => void flow.continueGame(gameId)}
+          onClearAllAccess={flow.clearAllAccess}
+          onContinueSelectedGame={flow.continueSelectedGame}
           onCreateGuestSession={() => void flow.createGuestSession()}
           onLogin={(email, password) => void flow.login(email, password)}
+          onLogoutUser={() => void flow.logoutUser()}
           onRegister={(email, displayName, password) =>
             void flow.register(email, displayName, password)}
+          onSelectGame={flow.setSelectedGameId}
           onStart={flow.startNewGame}
+          onSwitchToGuestSession={() => void flow.switchToGuestSession()}
           userSession={flow.userSession}
         />
       ) : null}

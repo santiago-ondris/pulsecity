@@ -66,3 +66,46 @@ func TestGameOwnedByUser(t *testing.T) {
 		t.Fatal("expected user mismatch to fail ownership check")
 	}
 }
+
+func TestValidateRegistrationInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		email   string
+		display string
+		pass    string
+		wantErr bool
+	}{
+		{name: "valid", email: "gm@pulsecity.test", display: "Jordan Vale", pass: "superpass", wantErr: false},
+		{name: "missing email", email: "", display: "Jordan Vale", pass: "superpass", wantErr: true},
+		{name: "invalid email", email: "bad", display: "Jordan Vale", pass: "superpass", wantErr: true},
+		{name: "short display", email: "gm@pulsecity.test", display: "Jo", pass: "superpass", wantErr: true},
+		{name: "short password", email: "gm@pulsecity.test", display: "Jordan Vale", pass: "short", wantErr: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateRegistrationInput(test.email, test.display, test.pass)
+			if test.wantErr && err == nil {
+				t.Fatal("expected error")
+			}
+			if !test.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateLoginInput(t *testing.T) {
+	if err := validateLoginInput("gm@pulsecity.test", "secretpass"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := validateLoginInput("", "secretpass"); err == nil {
+		t.Fatal("expected missing email to fail")
+	}
+	if err := validateLoginInput("bad", "secretpass"); err == nil {
+		t.Fatal("expected invalid email to fail")
+	}
+	if err := validateLoginInput("gm@pulsecity.test", ""); err == nil {
+		t.Fatal("expected empty password to fail")
+	}
+}

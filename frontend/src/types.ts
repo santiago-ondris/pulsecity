@@ -103,6 +103,12 @@ export interface UserSession {
   last_seen_at?: string;
 }
 
+export interface GuestUpgradeResult {
+  user_session: UserSession;
+  migrated_games: number;
+  guest_token_used: string;
+}
+
 export interface GameSummary {
   game_id: string;
   city_name: string;

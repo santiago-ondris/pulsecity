@@ -243,6 +243,42 @@ WHERE session_token = $1;
 	return commandTag.RowsAffected() > 0, nil
 }
 
+func (s *Store) MigrateGuestGamesToUser(ctx context.Context, guestToken, userID string) (int, error) {
+	guestToken = strings.TrimSpace(guestToken)
+	userID = strings.TrimSpace(userID)
+	if guestToken == "" || userID == "" {
+		return 0, fmt.Errorf("guest token and user id are required")
+	}
+
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	const query = `
+UPDATE games
+SET guest_token = '',
+	user_id = $2,
+	updated_at = $3
+WHERE guest_token = $1
+	AND (user_id IS NULL OR user_id = '');
+`
+
+	commandTag, err := tx.Exec(ctx, query, guestToken, userID, time.Now().UTC())
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+
+	return int(commandTag.RowsAffected()), nil
+}
+
 func (s *Store) CreateGuestSession(ctx context.Context, token string) error {
 	const query = `
 INSERT INTO guest_sessions (guest_token, created_at, last_seen_at)

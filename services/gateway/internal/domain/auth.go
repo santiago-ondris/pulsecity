@@ -29,3 +29,9 @@ type UserSession struct {
 	CreatedAt    string `json:"created_at,omitempty"`
 	LastSeenAt   string `json:"last_seen_at,omitempty"`
 }
+
+type GuestUpgradeResult struct {
+	UserSession    UserSession `json:"user_session"`
+	MigratedGames  int         `json:"migrated_games"`
+	GuestTokenUsed string      `json:"guest_token_used"`
+}

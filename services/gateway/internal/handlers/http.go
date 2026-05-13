@@ -30,6 +30,7 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("POST /api/v1/auth/register", deps.register)
 	mux.HandleFunc("POST /api/v1/auth/login", deps.login)
 	mux.HandleFunc("GET /api/v1/auth/session", deps.getCurrentSession)
+	mux.HandleFunc("POST /api/v1/auth/upgrade-guest", deps.upgradeGuest)
 	mux.HandleFunc("POST /api/v1/guest-sessions", deps.createGuestSession)
 	mux.HandleFunc("POST /api/v1/games", deps.startGame)
 	mux.HandleFunc("GET /api/v1/games", deps.listGames)
