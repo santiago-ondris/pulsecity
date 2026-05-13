@@ -49,3 +49,20 @@ func TestGuestOwnsGame(t *testing.T) {
 		t.Fatal("expected empty guest token to fail ownership check")
 	}
 }
+
+func TestGameOwnedByUser(t *testing.T) {
+	game := domain.GameSetup{GameID: "game-1", UserID: "user_123"}
+	currentActor := actor{
+		kind: "user",
+		user: domain.User{UserID: "user_123"},
+	}
+
+	if !gameOwnedBy(currentActor, game) {
+		t.Fatal("expected matching user to own game")
+	}
+
+	currentActor.user.UserID = "user_999"
+	if gameOwnedBy(currentActor, game) {
+		t.Fatal("expected user mismatch to fail ownership check")
+	}
+}

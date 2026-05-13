@@ -27,6 +27,9 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /", debugPage)
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.HandleFunc("GET /ws", deps.serveWebSocket)
+	mux.HandleFunc("POST /api/v1/auth/register", deps.register)
+	mux.HandleFunc("POST /api/v1/auth/login", deps.login)
+	mux.HandleFunc("GET /api/v1/auth/session", deps.getCurrentSession)
 	mux.HandleFunc("POST /api/v1/guest-sessions", deps.createGuestSession)
 	mux.HandleFunc("POST /api/v1/games", deps.startGame)
 	mux.HandleFunc("GET /api/v1/games", deps.listGames)
@@ -50,8 +53,12 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 	gameID := r.URL.Query().Get("game_id")
 	guestToken := strings.TrimSpace(r.URL.Query().Get("guest_token"))
+	sessionToken := strings.TrimSpace(r.URL.Query().Get("session_token"))
 	d.Hub.ServeWebSocket(w, r, func(conn *websocket.Conn) error {
 		if gameID == "" {
+			return nil
+		}
+		if sessionToken != "" && guestToken != "" {
 			return nil
 		}
 
@@ -59,8 +66,35 @@ func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if !found || !guestOwnsGame(guestToken, game) {
+		if !found {
 			return nil
+		}
+		if sessionToken != "" {
+			ok, err := d.Store.TouchUserSession(r.Context(), sessionToken)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+			session, sessionFound, err := d.Store.GetUserSession(r.Context(), sessionToken)
+			if err != nil {
+				return err
+			}
+			if !sessionFound || game.UserID != session.User.UserID {
+				return nil
+			}
+		} else {
+			ok, err := d.Store.TouchGuestSession(r.Context(), guestToken)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+			if !guestOwnsGame(guestToken, game) {
+				return nil
+			}
 		}
 
 		snapshot, ok := d.Snapshots.Get(gameID)
@@ -85,7 +119,7 @@ func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
-	guestToken, ok := d.requireGuestToken(w, r)
+	currentActor, ok := d.requireActor(w, r)
 	if !ok {
 		return
 	}
@@ -102,7 +136,8 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 
 	setup := domain.GameSetup{
 		GameID:             command.GameID,
-		GuestToken:         guestToken,
+		GuestToken:         currentActor.guestToken,
+		UserID:             currentActor.user.UserID,
 		CityName:           normalizeText(request.CityName, "Nueva Aurora"),
 		FranchiseName:      normalizeText(request.FranchiseName, "Lighthouses"),
 		Abbreviation:       normalizeAbbreviation(request.Abbreviation),
@@ -156,7 +191,7 @@ func (d Dependencies) createGuestSession(w http.ResponseWriter, r *http.Request)
 }
 
 func (d Dependencies) listGames(w http.ResponseWriter, r *http.Request) {
-	guestToken, ok := d.requireGuestToken(w, r)
+	currentActor, ok := d.requireActor(w, r)
 	if !ok {
 		return
 	}
@@ -164,7 +199,15 @@ func (d Dependencies) listGames(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	games, err := d.Store.ListGamesByGuest(ctx, guestToken)
+	var (
+		games []domain.GameSummary
+		err   error
+	)
+	if currentActor.kind == "user" {
+		games, err = d.Store.ListGamesByUser(ctx, currentActor.user.UserID)
+	} else {
+		games, err = d.Store.ListGamesByGuest(ctx, currentActor.guestToken)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to list games",
@@ -178,7 +221,7 @@ func (d Dependencies) listGames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Dependencies) getGame(w http.ResponseWriter, r *http.Request) {
-	guestToken, ok := d.requireGuestToken(w, r)
+	currentActor, ok := d.requireActor(w, r)
 	if !ok {
 		return
 	}
@@ -204,7 +247,7 @@ func (d Dependencies) getGame(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if !guestOwnsGame(guestToken, game) {
+	if !gameOwnedBy(currentActor, game) {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "game not found",
 		})
@@ -215,7 +258,7 @@ func (d Dependencies) getGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
-	guestToken, ok := d.requireGuestToken(w, r)
+	currentActor, ok := d.requireActor(w, r)
 	if !ok {
 		return
 	}
@@ -235,7 +278,7 @@ func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if !found || !guestOwnsGame(guestToken, game) {
+	if !found || !gameOwnedBy(currentActor, game) {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "snapshot not found",
 		})
@@ -269,7 +312,7 @@ func (d Dependencies) getSnapshot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
-	guestToken, ok := d.requireGuestToken(w, r)
+	currentActor, ok := d.requireActor(w, r)
 	if !ok {
 		return
 	}
@@ -295,7 +338,7 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if !guestOwnsGame(guestToken, game) {
+	if !gameOwnedBy(currentActor, game) {
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": "game not found",
 		})
@@ -358,35 +401,6 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, choice)
-}
-
-func (d Dependencies) requireGuestToken(w http.ResponseWriter, r *http.Request) (string, bool) {
-	token := guestTokenFromRequest(r)
-	if token == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{
-			"error": "missing guest token",
-		})
-		return "", false
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-
-	ok, err := d.Store.TouchGuestSession(ctx, token)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to validate guest token",
-		})
-		return "", false
-	}
-	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{
-			"error": "invalid guest token",
-		})
-		return "", false
-	}
-
-	return token, true
 }
 
 func guestTokenFromRequest(r *http.Request) string {

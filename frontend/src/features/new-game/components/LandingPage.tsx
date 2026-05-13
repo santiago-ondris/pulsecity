@@ -1,114 +1,224 @@
+import { useState } from "react";
+
 import { managementModeLabel, scenarioById } from "../helpers";
-import type { GameSummary } from "../../../types";
+import type { GameSummary, UserSession } from "../../../types";
 
 interface LandingPageProps {
+  activeAuthKind: "none" | "guest" | "user";
+  authenticatingUser: boolean;
   creatingGuestSession: boolean;
-  guestGames: GameSummary[];
-  guestReady: boolean;
+  games: GameSummary[];
   guestToken: string;
   status: string;
+  userSession: UserSession | null;
   onContinueGame: (gameId: string) => void;
   onCreateGuestSession: () => void;
+  onLogin: (email: string, password: string) => void;
+  onRegister: (email: string, displayName: string, password: string) => void;
   onStart: () => void;
 }
 
 export function LandingPage(props: LandingPageProps) {
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerDisplayName, setRegisterDisplayName] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
   return (
     <section className="screen landing-screen">
       <div className="landing-hero">
         <p className="eyebrow">PulseCity</p>
-        <h1>Antes de fundar una ciudad, primero queda definido quién entra a jugar.</h1>
+        <h1>La puerta de entrada ya distingue entre visitante ocasional y cuenta real.</h1>
         <p className="landing-copy">
-          El corte de hoy abre la puerta mínima de Milestone 1: sesión invitada real, token
-          persistido y partidas asociadas correctamente desde el primer click.
+          Este corte suma registro e inicio de sesión sin romper la base ya armada para invitados.
+          La idea es simple: el jugador ya puede existir como usuario real, pero todavía sin
+          mezclar migración de partidas guest hacia cuenta.
         </p>
 
         <div className="landing-actions">
-          {!props.guestReady ? (
+          <button type="button" className="primary-action landing-action" onClick={props.onStart}>
+            Nueva partida
+          </button>
+          {props.activeAuthKind === "none" ? (
             <button
               type="button"
-              className="primary-action landing-action"
+              className="secondary-action landing-action"
               onClick={props.onCreateGuestSession}
               disabled={props.creatingGuestSession}
             >
-              {props.creatingGuestSession ? "Creando acceso invitado..." : "Jugar como invitado"}
+              {props.creatingGuestSession ? "Creando invitado..." : "Jugar como invitado"}
             </button>
-          ) : (
-            <button type="button" className="primary-action landing-action" onClick={props.onStart}>
-              Nueva partida
-            </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      <div className="landing-grid">
+      <div className="landing-grid auth-grid">
         <article className="landing-note">
           <span>01</span>
-          <strong>Acceso</strong>
-          <p>{props.guestReady ? `Invitado activo: ${props.guestToken}` : "Todavía sin sesión."}</p>
+          <strong>Invitado</strong>
+          <p>
+            {props.guestToken
+              ? `Token activo disponible: ${props.guestToken}`
+              : "Todavía no hay sesión invitada persistida."}
+          </p>
         </article>
         <article className="landing-note">
           <span>02</span>
-          <strong>Ownership</strong>
-          <p>Las partidas nuevas quedan ligadas al token invitado y ya no flotan sueltas.</p>
+          <strong>Cuenta</strong>
+          <p>
+            {props.userSession
+              ? `${props.userSession.user.display_name} ya está autenticado.`
+              : "Ahora podés registrarte o iniciar sesión desde esta misma entrada."}
+          </p>
         </article>
         <article className="landing-note">
           <span>03</span>
-          <strong>Continuidad</strong>
-          <p>La entrada puede listar y reanudar fundaciones ya asociadas a este invitado.</p>
+          <strong>Ownership</strong>
+          <p>Las partidas nuevas se crean bajo el actor activo, sin perder separación de dueños.</p>
         </article>
         <article className="landing-note">
           <span>04</span>
-          <strong>Próximo paso</strong>
-          <p>Sobre esta base ya se puede sumar login y registro sin rehacer el flujo.</p>
+          <strong>Siguiente paso</strong>
+          <p>Después de esto ya queda listo el terreno para migrar partidas guest a cuenta.</p>
         </article>
       </div>
 
-      {props.guestReady ? (
-        <section className="guest-session-panel">
+      <div className="auth-access-grid">
+        <section className="auth-panel">
           <div className="panel-header">
-            <p className="eyebrow">Sesión invitada</p>
-            <h2>Partidas asociadas</h2>
+            <p className="eyebrow">Registro</p>
+            <h2>Crear cuenta</h2>
           </div>
-          <p className="copy">{props.status}</p>
-
-          {props.guestGames.length === 0 ? (
-            <div className="guest-empty-state">
-              <strong>Este invitado todavía no tiene partidas.</strong>
-              <p>La próxima fundación quedará registrada automáticamente bajo este token.</p>
-            </div>
-          ) : (
-            <ul className="guest-game-list">
-              {props.guestGames.map((game) => {
-                const scenario = scenarioById(game.initial_scenario);
-
-                return (
-                  <li key={game.game_id} className="guest-game-card">
-                    <div>
-                      <p className="eyebrow">{game.city_name}</p>
-                      <h3>{game.franchise_name}</h3>
-                      <p className="guest-game-meta">
-                        {scenario.label} · {managementModeLabel(game.city_management_mode)}
-                      </p>
-                      <p className="guest-game-meta">Estado: {game.status}</p>
-                    </div>
-                    <div className="guest-game-actions">
-                      <span>{formatUpdatedAt(game.updated_at)}</span>
-                      <button
-                        type="button"
-                        className="secondary-action"
-                        onClick={() => props.onContinueGame(game.game_id)}
-                      >
-                        Continuar
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <p className="copy">Cuenta real mínima para empezar a dejar partidas bajo usuario.</p>
+          <label className="field">
+            <span>Nombre visible</span>
+            <input
+              value={registerDisplayName}
+              onChange={(event) => setRegisterDisplayName(event.target.value)}
+              placeholder="Jordan Vale"
+            />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={registerEmail}
+              onChange={(event) => setRegisterEmail(event.target.value)}
+              placeholder="gm@pulsecity.test"
+            />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={registerPassword}
+              onChange={(event) => setRegisterPassword(event.target.value)}
+              placeholder="Minimo 8 caracteres"
+            />
+          </label>
+          <button
+            type="button"
+            className="primary-action"
+            disabled={props.authenticatingUser}
+            onClick={() => props.onRegister(registerEmail, registerDisplayName, registerPassword)}
+          >
+            {props.authenticatingUser ? "Creando cuenta..." : "Registrarme"}
+          </button>
         </section>
-      ) : null}
+
+        <section className="auth-panel">
+          <div className="panel-header">
+            <p className="eyebrow">Login</p>
+            <h2>Iniciar sesión</h2>
+          </div>
+          <p className="copy">
+            Si ya existe una cuenta, esta sesión pasa a trabajar bajo usuario autenticado.
+          </p>
+          <label className="field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={loginEmail}
+              onChange={(event) => setLoginEmail(event.target.value)}
+              placeholder="gm@pulsecity.test"
+            />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(event) => setLoginPassword(event.target.value)}
+              placeholder="Tu contraseña"
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={props.authenticatingUser}
+            onClick={() => props.onLogin(loginEmail, loginPassword)}
+          >
+            {props.authenticatingUser ? "Ingresando..." : "Iniciar sesión"}
+          </button>
+        </section>
+      </div>
+
+      <section className="guest-session-panel">
+        <div className="panel-header">
+          <p className="eyebrow">
+            {props.activeAuthKind === "user" ? "Sesión autenticada" : "Sesión activa"}
+          </p>
+          <h2>Partidas asociadas</h2>
+        </div>
+        <p className="copy">{props.status}</p>
+
+        {props.userSession ? (
+          <div className="account-summary">
+            <strong>{props.userSession.user.display_name}</strong>
+            <p>{props.userSession.user.email}</p>
+          </div>
+        ) : null}
+
+        {props.games.length === 0 ? (
+          <div className="guest-empty-state">
+            <strong>Todavía no hay partidas para este actor.</strong>
+            <p>La próxima fundación quedará registrada bajo la sesión actualmente activa.</p>
+          </div>
+        ) : (
+          <ul className="guest-game-list">
+            {props.games.map((game) => {
+              const scenario = scenarioById(game.initial_scenario);
+
+              return (
+                <li key={game.game_id} className="guest-game-card">
+                  <div>
+                    <p className="eyebrow">{game.city_name}</p>
+                    <h3>{game.franchise_name}</h3>
+                    <p className="guest-game-meta">
+                      {scenario.label} · {managementModeLabel(game.city_management_mode)}
+                    </p>
+                    <p className="guest-game-meta">
+                      Dueño: {game.owner_kind === "user" ? "Cuenta" : "Invitado"} · Estado:{" "}
+                      {game.status}
+                    </p>
+                  </div>
+                  <div className="guest-game-actions">
+                    <span>{formatUpdatedAt(game.updated_at)}</span>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => props.onContinueGame(game.game_id)}
+                    >
+                      Continuar
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </section>
   );
 }

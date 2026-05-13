@@ -34,6 +34,8 @@ type MapGenerationRequest struct {
 type GameSetup struct {
 	GameID             string           `json:"game_id"`
 	GuestToken         string           `json:"-"`
+	UserID             string           `json:"-"`
+	OwnerKind          string           `json:"owner_kind,omitempty"`
 	CityName           string           `json:"city_name"`
 	FranchiseName      string           `json:"franchise_name"`
 	Abbreviation       string           `json:"abbreviation"`
@@ -53,6 +55,7 @@ type GameSummary struct {
 	GameID             string `json:"game_id"`
 	CityName           string `json:"city_name"`
 	FranchiseName      string `json:"franchise_name"`
+	OwnerKind          string `json:"owner_kind"`
 	InitialScenario    string `json:"initial_scenario"`
 	CityManagementMode string `json:"city_management_mode"`
 	Status             string `json:"status"`

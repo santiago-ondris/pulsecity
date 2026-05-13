@@ -16,14 +16,19 @@ export function NewGameFlow() {
     <main className="new-game-shell">
       {flow.currentPage === "home" ? (
         <LandingPage
+          activeAuthKind={flow.activeAuthKind}
+          authenticatingUser={flow.authenticatingUser}
           creatingGuestSession={flow.creatingGuestSession}
-          guestGames={flow.guestGames}
-          guestReady={flow.guestReady}
+          games={flow.games}
           guestToken={flow.guestToken}
           status={flow.status}
           onContinueGame={(gameId) => void flow.continueGame(gameId)}
           onCreateGuestSession={() => void flow.createGuestSession()}
+          onLogin={(email, password) => void flow.login(email, password)}
+          onRegister={(email, displayName, password) =>
+            void flow.register(email, displayName, password)}
           onStart={flow.startNewGame}
+          userSession={flow.userSession}
         />
       ) : null}
 

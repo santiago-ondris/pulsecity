@@ -89,10 +89,25 @@ export interface GuestSession {
   last_seen_at?: string;
 }
 
+export interface User {
+  user_id: string;
+  email: string;
+  display_name: string;
+  created_at?: string;
+}
+
+export interface UserSession {
+  session_token: string;
+  user: User;
+  created_at?: string;
+  last_seen_at?: string;
+}
+
 export interface GameSummary {
   game_id: string;
   city_name: string;
   franchise_name: string;
+  owner_kind: "guest" | "user";
   initial_scenario: string;
   city_management_mode: string;
   status: string;
