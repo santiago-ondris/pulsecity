@@ -1,5 +1,7 @@
+import type { CSSProperties } from "react";
+
+import skylineBackdrop from "../../assets/landing-city-night.svg";
 import { colorPresets } from "../constants";
-import { ColorField, FranchisePreview } from "./common";
 
 interface IdentityPageProps {
   accentColor: string;
@@ -18,93 +20,136 @@ interface IdentityPageProps {
 }
 
 export function IdentityPage(props: IdentityPageProps) {
-  return (
-    <section className="screen step-screen">
-      <div className="step-copy">
-        <p className="eyebrow">Paso 1 de 4</p>
-        <h1>Primero definí la identidad visible de la franquicia.</h1>
-        <p>
-          En esta pantalla solo se resuelve eso. Nombre, sigla y paleta. Nada más compite por tu
-          atención.
-        </p>
-      </div>
+  const themeStyle = {
+    "--identity-backdrop": `url("${skylineBackdrop}")`,
+    "--franchise-primary": props.primaryColor,
+    "--franchise-secondary": props.secondaryColor,
+    "--franchise-accent": props.accentColor,
+  } as CSSProperties;
 
-      <div className="step-layout">
-        <article className="step-card">
-          <div className="field-grid">
-            <label className="field">
+  return (
+    <section className="identity-builder" style={themeStyle}>
+      <div className="identity-builder__image" />
+      <div className="identity-builder__shade" />
+
+      <header className="identity-builder__topbar">
+        <div>
+          <p className="eyebrow">Paso 1 de 4</p>
+          <strong>Identidad de franquicia</strong>
+        </div>
+        <span>{safeAbbreviation(props.abbreviation)}</span>
+      </header>
+
+      <main className="identity-builder__main">
+        <section className="identity-live-card" aria-label="Vista previa de la identidad">
+          <div className="identity-live-card__crest">
+            <span>{safeAbbreviation(props.abbreviation)}</span>
+          </div>
+          <div className="identity-live-card__name">
+            <p>{props.cityName || "Ciudad"}</p>
+            <h1>{props.franchiseName || "Franquicia"}</h1>
+          </div>
+          <div className="identity-live-card__palette">
+            <span style={{ background: props.primaryColor }} />
+            <span style={{ background: props.secondaryColor }} />
+            <span style={{ background: props.accentColor }} />
+          </div>
+        </section>
+
+        <section className="identity-editor" aria-label="Editar identidad de franquicia">
+          <div className="identity-editor__heading">
+            <p className="eyebrow">Crear marca</p>
+            <h2>Nombre, sigla y colores</h2>
+          </div>
+
+          <div className="identity-editor__fields">
+            <label className="identity-input">
               <span>Ciudad</span>
-              <input value={props.cityName} onChange={(event) => props.onCityNameChange(event.target.value)} />
+              <input
+                value={props.cityName}
+                onChange={(event) => props.onCityNameChange(event.target.value)}
+                placeholder="Nueva Aurora"
+              />
             </label>
 
-            <label className="field">
+            <label className="identity-input">
               <span>Franquicia</span>
               <input
                 value={props.franchiseName}
                 onChange={(event) => props.onFranchiseNameChange(event.target.value)}
+                placeholder="Lighthouses"
               />
             </label>
 
-            <label className="field field-short">
-              <span>Abreviatura</span>
+            <label className="identity-input identity-input--short">
+              <span>Sigla</span>
               <input
                 value={props.abbreviation}
                 maxLength={3}
                 onChange={(event) => props.onAbbreviationChange(event.target.value.toUpperCase())}
+                placeholder="NAR"
               />
             </label>
           </div>
 
-          <div className="panel-section">
-            <div className="section-title-row">
-              <div>
-                <p className="eyebrow">Paleta</p>
-                <h3>Colores fundacionales</h3>
-              </div>
-              <p className="microcopy">
-                Esta identidad ya se persiste de verdad en backend cuando la partida queda creada.
-              </p>
-            </div>
-
-            <div className="color-stack">
-              <ColorField
-                label="Primario"
-                value={props.primaryColor}
-                onChange={props.onPrimaryColorChange}
-                presets={colorPresets}
-              />
-              <ColorField
-                label="Secundario"
-                value={props.secondaryColor}
-                onChange={props.onSecondaryColorChange}
-                presets={colorPresets}
-              />
-              <ColorField
-                label="Acento"
-                value={props.accentColor}
-                onChange={props.onAccentColorChange}
-                presets={colorPresets}
-              />
-            </div>
+          <div className="identity-editor__palette" aria-label="Elegir paleta de colores">
+            <PaletteRow label="Primario" value={props.primaryColor} onChange={props.onPrimaryColorChange} />
+            <PaletteRow label="Secundario" value={props.secondaryColor} onChange={props.onSecondaryColorChange} />
+            <PaletteRow label="Acento" value={props.accentColor} onChange={props.onAccentColorChange} />
           </div>
 
-          <div className="page-actions">
-            <button type="button" className="primary-action" onClick={props.onContinue}>
-              Continuar al escenario inicial
-            </button>
-          </div>
-        </article>
-
-        <FranchisePreview
-          accentColor={props.accentColor}
-          abbreviation={props.abbreviation}
-          cityName={props.cityName}
-          contextLabel="Preview viva"
-          franchiseName={props.franchiseName}
-          primaryColor={props.primaryColor}
-          secondaryColor={props.secondaryColor}
-        />
-      </div>
+          <button type="button" className="primary-action identity-builder__continue" onClick={props.onContinue}>
+            Continuar al escenario inicial
+          </button>
+        </section>
+      </main>
     </section>
   );
+}
+
+function PaletteRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="identity-palette-row">
+      <div className="identity-palette-row__label">
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+
+      <div className="identity-palette-row__options">
+        {colorPresets.map((preset) => (
+          <button
+            key={`${label}-${preset.value}`}
+            type="button"
+            className={
+              value.toLowerCase() === preset.value.toLowerCase()
+                ? "identity-color-dot active"
+                : "identity-color-dot"
+            }
+            onClick={() => onChange(preset.value)}
+            aria-label={`${label} ${preset.label}`}
+            title={preset.label}
+          >
+            <span style={{ background: preset.value }} />
+          </button>
+        ))}
+
+        <label className="identity-color-picker" title={`Elegir color ${label.toLowerCase()}`}>
+          <input type="color" value={value} onChange={(event) => onChange(event.target.value)} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function safeAbbreviation(value: string) {
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : "PCY";
 }

@@ -1,0 +1,88 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1080" fill="#071015"/>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <ellipse cx="1045" cy="471" rx="702" ry="318" fill="url(#fogTop)" opacity="0.7"/>
+  <ellipse cx="1148" cy="706" rx="849" ry="260" fill="url(#fogBottom)" opacity="0.66"/>
+  <path d="M0 884L182 803L337 825L487 742L627 781L792 695L924 714L1071 636L1224 690L1404 603L1594 664L1733 618L1920 709V1080H0V884Z" fill="#0A171C"/>
+  <path d="M0 914L155 862L316 877L477 819L647 850L823 776L975 796L1166 730L1352 776L1516 732L1684 774L1827 748L1920 781V1080H0V914Z" fill="#0F2328"/>
+  <path d="M0 955L201 914L372 925L539 884L680 909L844 854L1027 871L1176 822L1346 855L1495 818L1698 846L1857 827L1920 839V1080H0V955Z" fill="#143037"/>
+  <g opacity="0.9">
+    <rect x="234" y="435" width="70" height="363" rx="3" fill="#11272E"/>
+    <rect x="315" y="384" width="48" height="414" rx="3" fill="#122E34"/>
+    <rect x="376" y="336" width="88" height="462" rx="3" fill="#163942"/>
+    <rect x="483" y="418" width="64" height="380" rx="3" fill="#122D34"/>
+    <rect x="566" y="362" width="98" height="436" rx="3" fill="#173840"/>
+    <rect x="1323" y="399" width="86" height="399" rx="3" fill="#15333B"/>
+    <rect x="1424" y="333" width="63" height="465" rx="3" fill="#173841"/>
+    <rect x="1501" y="383" width="98" height="415" rx="3" fill="#143239"/>
+    <rect x="1617" y="426" width="77" height="372" rx="3" fill="#112B31"/>
+    <rect x="1711" y="367" width="122" height="431" rx="3" fill="#15353D"/>
+  </g>
+  <g opacity="0.8">
+    <rect x="302" y="476" width="10" height="12" fill="#61F7D6"/>
+    <rect x="302" y="500" width="10" height="12" fill="#61F7D6"/>
+    <rect x="302" y="524" width="10" height="12" fill="#61F7D6"/>
+    <rect x="420" y="388" width="11" height="14" fill="#5DEED0"/>
+    <rect x="420" y="415" width="11" height="14" fill="#5DEED0"/>
+    <rect x="420" y="442" width="11" height="14" fill="#5DEED0"/>
+    <rect x="606" y="426" width="12" height="14" fill="#68FFE0"/>
+    <rect x="606" y="454" width="12" height="14" fill="#68FFE0"/>
+    <rect x="1460" y="392" width="10" height="14" fill="#6FFBE2"/>
+    <rect x="1460" y="421" width="10" height="14" fill="#6FFBE2"/>
+    <rect x="1554" y="452" width="12" height="14" fill="#6DFFDB"/>
+    <rect x="1554" y="480" width="12" height="14" fill="#6DFFDB"/>
+    <rect x="1767" y="439" width="14" height="16" fill="#7EFBE5"/>
+    <rect x="1767" y="472" width="14" height="16" fill="#7EFBE5"/>
+  </g>
+  <ellipse cx="980" cy="743" rx="242" ry="125" fill="#0F2F32"/>
+  <ellipse cx="980" cy="740" rx="206" ry="96" fill="#102E34"/>
+  <ellipse cx="980" cy="735" rx="232" ry="116" fill="url(#arenaGlow)" opacity="0.92"/>
+  <ellipse cx="980" cy="735" rx="151" ry="74" fill="#152A2E"/>
+  <ellipse cx="980" cy="734" rx="122" ry="54" fill="#EDF9FF" opacity="0.08"/>
+  <path d="M822 734C822 681.533 893.187 639 981 639C1068.81 639 1140 681.533 1140 734V747H822V734Z" fill="#19363D"/>
+  <path d="M833 741C833 694.056 898.891 656 980.5 656C1062.11 656 1128 694.056 1128 741V750H833V741Z" fill="url(#arenaBand)"/>
+  <path d="M843 752H1118V775C1118 790.464 1105.46 803 1090 803H871C855.536 803 843 790.464 843 775V752Z" fill="#0D2229"/>
+  <path d="M861 752H1100V770C1100 780.493 1091.49 789 1081 789H880C869.507 789 861 780.493 861 770V752Z" fill="#112D35"/>
+  <path d="M873 756H1088V765C1088 771.075 1083.08 776 1077 776H884C877.925 776 873 771.075 873 765V756Z" fill="#5AFFD7" opacity="0.4"/>
+  <g filter="url(#lights)">
+    <path d="M910 612L947 741" stroke="#00C896" stroke-width="8" stroke-linecap="round"/>
+    <path d="M980 597V742" stroke="#42FFE2" stroke-width="10" stroke-linecap="round"/>
+    <path d="M1052 612L1016 741" stroke="#00DFA6" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <path d="M765 852C844 807.333 917.333 785 985 785C1052.67 785 1126.33 807.333 1206 852" stroke="#62FFD8" stroke-opacity="0.35" stroke-width="3"/>
+  <path d="M726 890C829.333 823.667 915 790.5 983 790.5C1051 790.5 1138 823.667 1244 890" stroke="#73FFE0" stroke-opacity="0.16" stroke-width="2"/>
+  <rect y="915" width="1920" height="165" fill="url(#streetFade)"/>
+  <defs>
+    <linearGradient id="sky" x1="960" y1="0" x2="960" y2="1080" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B171E"/>
+      <stop offset="0.45" stop-color="#0D141A"/>
+      <stop offset="1" stop-color="#060B0E"/>
+    </linearGradient>
+    <radialGradient id="fogTop" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1045 471) rotate(90) scale(318 702)">
+      <stop stop-color="#2D5A62" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#2D5A62" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="fogBottom" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1148 706) rotate(90) scale(260 849)">
+      <stop stop-color="#2A6A62" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#2A6A62" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="arenaGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(980 735) rotate(90) scale(116 232)">
+      <stop stop-color="#6CFFF1" stop-opacity="0.9"/>
+      <stop offset="0.48" stop-color="#22DDB8" stop-opacity="0.52"/>
+      <stop offset="1" stop-color="#22DDB8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="arenaBand" x1="980.5" y1="656" x2="980.5" y2="750" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DAF8FF" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#40F7D1" stop-opacity="0.38"/>
+    </linearGradient>
+    <linearGradient id="streetFade" x1="960" y1="915" x2="960" y2="1080" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#031014" stop-opacity="0"/>
+      <stop offset="1" stop-color="#031014"/>
+    </linearGradient>
+    <filter id="lights" x="888" y="575" width="186" height="189" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="5" result="effect1_foregroundBlur_1_2"/>
+    </filter>
+  </defs>
+</svg>

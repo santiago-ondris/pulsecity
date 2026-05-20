@@ -80,9 +80,6 @@ CREATE TABLE IF NOT EXISTS games (
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_games_guest_token_updated_at ON games (guest_token, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_games_user_id_updated_at ON games (user_id, updated_at DESC);
-
 ALTER TABLE games ADD COLUMN IF NOT EXISTS guest_token TEXT NOT NULL DEFAULT '';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS user_id TEXT;
 ALTER TABLE games ADD COLUMN IF NOT EXISTS franchise_name TEXT NOT NULL DEFAULT '';
@@ -94,6 +91,9 @@ ALTER TABLE games ADD COLUMN IF NOT EXISTS initial_scenario TEXT NOT NULL DEFAUL
 ALTER TABLE games ADD COLUMN IF NOT EXISTS city_management_mode TEXT NOT NULL DEFAULT 'owner_influence';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS owner_intro_event JSONB;
 ALTER TABLE games ADD COLUMN IF NOT EXISTS owner_intro_response JSONB;
+
+CREATE INDEX IF NOT EXISTS idx_games_guest_token_updated_at ON games (guest_token, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_games_user_id_updated_at ON games (user_id, updated_at DESC);
 
 DO $$
 BEGIN
@@ -382,7 +382,7 @@ func (s *Store) GetGame(ctx context.Context, gameID string) (domain.GameSetup, b
 SELECT
 	game_id,
 	guest_token,
-	user_id,
+	COALESCE(user_id, '') AS user_id,
 	city_name,
 	franchise_name,
 	abbreviation,

@@ -1,6 +1,8 @@
+import type { CSSProperties } from "react";
+
+import skylineBackdrop from "../../assets/landing-city-night.svg";
 import { managementModeLabel, scenarioById } from "../helpers";
 import type { NewGameDraft } from "../types";
-import { FranchisePreview, StatusBadge } from "./common";
 
 interface LaunchPageProps {
   creatingGame: boolean;
@@ -13,78 +15,91 @@ interface LaunchPageProps {
 
 export function LaunchPage(props: LaunchPageProps) {
   const scenario = scenarioById(props.draft.selectedScenario);
+  const fullName = `${props.draft.cityName} ${props.draft.franchiseName}`;
+
+  const launchStyle = {
+    "--launch-backdrop": `url("${skylineBackdrop}")`,
+    "--franchise-primary": props.draft.primaryColor,
+    "--franchise-secondary": props.draft.secondaryColor,
+    "--franchise-accent": props.draft.accentColor,
+  } as CSSProperties;
 
   return (
-    <section className="screen step-screen">
-      <div className="step-copy">
-        <p className="eyebrow">Paso 4 de 4</p>
-        <h1>Última página antes de fundar el mundo.</h1>
-        <p>
-          Ya no estás editando campos. Solo revisás la lectura completa de la partida y confirmás
-          el inicio.
-        </p>
-      </div>
+    <section className="launch-builder" style={launchStyle}>
+      <div className="launch-builder__image" />
+      <div className="launch-builder__shade" />
 
-      <div className="step-layout">
-        <article className="step-card">
-          <div className="launch-dossier">
-            <div className="dossier-row">
-              <span>Franquicia</span>
-              <strong>
-                {props.draft.cityName} {props.draft.franchiseName}
-              </strong>
-            </div>
-            <div className="dossier-row">
-              <span>Sigla</span>
-              <strong>{props.draft.abbreviation}</strong>
-            </div>
-            <div className="dossier-row">
-              <span>Escenario</span>
-              <strong>{scenario.label}</strong>
-            </div>
-            <div className="dossier-row">
-              <span>Presión inicial</span>
-              <strong>{scenario.pressure}</strong>
-            </div>
-            <div className="dossier-row">
-              <span>Gestión de ciudad</span>
-              <strong>{managementModeLabel(props.draft.cityManagementMode)}</strong>
-            </div>
-            <div className="dossier-row">
-              <span>Dirección del Owner</span>
-              <strong>{props.ownerIntroResponseLabel ?? "Se define después de la fundación"}</strong>
-            </div>
+      <header className="launch-builder__topbar">
+        <div>
+          <p className="eyebrow">Paso 4 de 4</p>
+          <strong>Revision final</strong>
+        </div>
+        <span>{safeAbbreviation(props.draft.abbreviation)}</span>
+      </header>
+
+      <main className="launch-builder__main">
+        <section className="launch-identity" aria-label="Franquicia a fundar">
+          <div className="launch-identity__crest">
+            <span>{safeAbbreviation(props.draft.abbreviation)}</span>
+          </div>
+          <div className="launch-identity__name">
+            <p>{props.draft.cityName}</p>
+            <h1>{props.draft.franchiseName}</h1>
+          </div>
+          <div className="launch-identity__palette">
+            <span style={{ background: props.draft.primaryColor }} />
+            <span style={{ background: props.draft.secondaryColor }} />
+            <span style={{ background: props.draft.accentColor }} />
+          </div>
+        </section>
+
+        <section className="launch-confirmation" aria-label="Confirmar fundacion">
+          <div className="launch-confirmation__heading">
+            <p className="eyebrow">Listo para fundar</p>
+            <h2>{fullName}</h2>
           </div>
 
-          <div className="launch-status">
-            <StatusBadge label={props.status} tone="info" />
+          <div className="launch-summary-grid">
+            <SummaryItem label="Escenario" value={scenario.label} />
+            <SummaryItem label="Presion inicial" value={scenario.pressure} />
+            <SummaryItem label="Ciudad" value={scenario.city} />
+            <SummaryItem label="Gobierno" value={managementModeLabel(props.draft.cityManagementMode)} />
+            <SummaryItem
+              label="Owner"
+              value={props.ownerIntroResponseLabel ?? "Se define despues de la fundacion"}
+            />
+            <SummaryItem label="Sistema" value={props.status} />
           </div>
 
-          <div className="page-actions split-actions">
+          <div className="launch-actions">
             <button type="button" className="secondary-action" onClick={props.onBack}>
               Volver
             </button>
             <button
               type="button"
-              className="primary-action"
+              className="primary-action launch-primary-action"
               onClick={props.onLaunch}
               disabled={props.creatingGame}
             >
-              {props.creatingGame ? "Fundando..." : "Confirmar franquicia y generar mapa"}
+              {props.creatingGame ? "Fundando..." : "Fundar ciudad y generar mapa"}
             </button>
           </div>
-        </article>
-
-        <FranchisePreview
-          accentColor={props.draft.accentColor}
-          abbreviation={props.draft.abbreviation}
-          cityName={props.draft.cityName}
-          contextLabel="Dossier final"
-          franchiseName={props.draft.franchiseName}
-          primaryColor={props.draft.primaryColor}
-          secondaryColor={props.draft.secondaryColor}
-        />
-      </div>
+        </section>
+      </main>
     </section>
   );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="launch-summary-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function safeAbbreviation(value: string) {
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : "PCY";
 }

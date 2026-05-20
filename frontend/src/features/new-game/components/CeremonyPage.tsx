@@ -1,3 +1,6 @@
+import type { CSSProperties } from "react";
+
+import skylineBackdrop from "../../assets/landing-city-night.svg";
 import type { MapClientState, RealtimeEvent } from "../../../types";
 import { stageMeta, stageSequence } from "../constants";
 import {
@@ -7,7 +10,6 @@ import {
   gridColumns,
   summarizeTerrain,
 } from "../helpers";
-import { Metric, StatusBadge } from "./common";
 
 interface CeremonyPageProps {
   currentStage: {
@@ -36,35 +38,36 @@ export function CeremonyPage(props: CeremonyPageProps) {
   const showStadium = props.mapState.stage === "stadium" || props.mapState.stage === "complete";
 
   return (
-    <section className="screen ceremony-screen">
-      <div className="ceremony-topbar">
-        <div>
-          <p className="eyebrow">Ceremonia de fundación</p>
-          <h1>{props.currentStage.title}</h1>
-          <p className="copy">{props.currentStage.description}</p>
-        </div>
-        <div className="ceremony-badges">
-          <StatusBadge label={props.socketStatus} tone="primary" />
-          <StatusBadge label={props.status} tone="info" />
-        </div>
-      </div>
+    <section
+      className="ceremony-builder"
+      style={{ "--ceremony-backdrop": `url("${skylineBackdrop}")` } as CSSProperties}
+    >
+      <div className="ceremony-builder__image" />
+      <div className="ceremony-builder__shade" />
 
-      <div className="ceremony-grid">
-        <article className="ceremony-map-card">
-          <div className="ceremony-stats">
-            <Metric label="Partida" value={formatGameId(props.mapState.game_id || props.gameId)} />
-            <Metric label="Etapa" value={props.currentStage.label} />
-            <Metric label="Progreso" value={`${props.mapState.progress}%`} />
-            <Metric
-              label="Dirección inicial"
-              value={props.ownerIntroResponseLabel ?? "Pendiente de llamada del Owner"}
-            />
+      <header className="ceremony-builder__topbar">
+        <div>
+          <p className="eyebrow">Ceremonia de fundacion</p>
+          <strong>{props.currentStage.label}</strong>
+        </div>
+        <div className="ceremony-live-status">
+          <span>{props.socketStatus}</span>
+          <strong>{props.mapState.progress}%</strong>
+        </div>
+      </header>
+
+      <main className="ceremony-builder__main">
+        <section className="ceremony-world" aria-label="Mapa generado">
+          <div className="ceremony-world__header">
+            <div>
+              <p className="eyebrow">Nacimiento del mundo</p>
+              <h1>{props.currentStage.title}</h1>
+              <p>{props.currentStage.description}</p>
+            </div>
+            <span>{props.mapState.message}</span>
           </div>
 
-          <div className="world-frame">
-            <div className="world-header">
-              <StatusBadge label={props.mapState.message} tone="info" />
-            </div>
+          <div className="ceremony-world__frame">
             <div className="map-grid" style={gridColumns(props.mapState.map_data?.width ?? 1)}>
               {(props.mapState.map_data?.cells ?? []).flatMap((row, y) =>
                 row.map((cell, x) => {
@@ -83,21 +86,30 @@ export function CeremonyPage(props: CeremonyPageProps) {
             </div>
           </div>
 
-          <div className="terrain-band">
-            <Metric label="Agua" value={`${terrainStats.water}%`} />
-            <Metric label="Bosque" value={`${terrainStats.forest}%`} />
-            <Metric label="Llano" value={`${terrainStats.plain}%`} />
-            <Metric label="Colina" value={`${terrainStats.hill}%`} />
+          <div className="ceremony-terrain">
+            <TerrainStat label="Agua" value={terrainStats.water} />
+            <TerrainStat label="Bosque" value={terrainStats.forest} />
+            <TerrainStat label="Llano" value={terrainStats.plain} />
+            <TerrainStat label="Colina" value={terrainStats.hill} />
           </div>
-        </article>
+        </section>
 
-        <aside className="ceremony-sidebar">
-          <article className="step-card">
-            <div className="panel-header">
-              <p className="eyebrow">Pipeline</p>
-              <h2>Orden del backend</h2>
+        <aside className="ceremony-control">
+          <section className="ceremony-panel">
+            <p className="eyebrow">Estado</p>
+            <div className="ceremony-state-grid">
+              <StateItem label="Partida" value={formatGameId(props.mapState.game_id || props.gameId)} />
+              <StateItem label="Sistema" value={props.status} />
+              <StateItem
+                label="Owner"
+                value={props.ownerIntroResponseLabel ?? "Pendiente de llamada"}
+              />
             </div>
-            <ol className="timeline">
+          </section>
+
+          <section className="ceremony-panel">
+            <p className="eyebrow">Pipeline</p>
+            <ol className="ceremony-pipeline">
               {stageSequence.map((stage, index) => {
                 const isActive = props.mapState.stage === stage;
                 const isDone = completedSteps >= index;
@@ -106,32 +118,29 @@ export function CeremonyPage(props: CeremonyPageProps) {
                   <li
                     key={stage}
                     className={[
-                      "timeline-item",
+                      "ceremony-pipeline__item",
                       isActive ? "active" : "",
                       isDone ? "done" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
                   >
-                      <span className="timeline-index">0{index + 1}</span>
-                      <div>
-                        <strong>{stageMeta[stage].label}</strong>
-                        <p>{stageMeta[stage].title}</p>
-                      </div>
-                    </li>
-                  );
+                    <span>0{index + 1}</span>
+                    <div>
+                      <strong>{stageMeta[stage].label}</strong>
+                      <small>{stageMeta[stage].title}</small>
+                    </div>
+                  </li>
+                );
               })}
             </ol>
-          </article>
+          </section>
 
-          <article className="step-card">
-            <div className="panel-header">
-              <p className="eyebrow">Eventos</p>
-              <h2>Traza reciente</h2>
-            </div>
-            <ul className="event-list">
+          <section className="ceremony-panel">
+            <p className="eyebrow">Eventos recientes</p>
+            <ul className="ceremony-events">
               {props.events.length === 0 ? (
-                <li className="event-empty">Todavia no llegaron eventos para esta partida.</li>
+                <li>Todavia no llegaron eventos para esta partida.</li>
               ) : (
                 props.events.map((event, index) => (
                   <li key={`${event.subject}-${index}`}>
@@ -141,9 +150,27 @@ export function CeremonyPage(props: CeremonyPageProps) {
                 ))
               )}
             </ul>
-          </article>
+          </section>
         </aside>
-      </div>
+      </main>
     </section>
+  );
+}
+
+function StateItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ceremony-state-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TerrainStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="ceremony-terrain__item">
+      <span>{label}</span>
+      <strong>{value}%</strong>
+    </div>
   );
 }
