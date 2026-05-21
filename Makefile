@@ -1,4 +1,4 @@
-.PHONY: up down build test logs run-gateway run-map-service run-narrative-service run-frontend
+.PHONY: up down build test logs run-agent-service run-analytics-service run-city-service run-gateway run-map-service run-match-service run-narrative-service run-team-service run-frontend
 
 # Servicios
 up:
@@ -13,32 +13,57 @@ logs:
 # Build
 build-rust:
 	cargo build --manifest-path services/map-service/Cargo.toml
+	cargo build --manifest-path services/agent-service/Cargo.toml
+	cargo build --manifest-path services/match-service/Cargo.toml
 
 build-go:
-	go -C services/gateway build ./...
-	go -C services/narrative-service build ./...
+	GOCACHE=/tmp/pulsecity-gateway-gocache go -C services/gateway build ./...
+	GOCACHE=/tmp/pulsecity-narrative-gocache go -C services/narrative-service build ./...
+	GOCACHE=/tmp/pulsecity-team-gocache go -C services/team-service build ./...
+	GOCACHE=/tmp/pulsecity-city-gocache go -C services/city-service build ./...
+	GOCACHE=/tmp/pulsecity-analytics-gocache go -C services/analytics-service build ./...
 
 build: build-rust build-go
 
 # Tests
 test-rust:
 	cargo test --manifest-path services/map-service/Cargo.toml
+	cargo test --manifest-path services/agent-service/Cargo.toml
+	cargo test --manifest-path services/match-service/Cargo.toml
 
 test-go:
-	go -C services/gateway test ./...
+	GOCACHE=/tmp/pulsecity-gateway-gocache go -C services/gateway test ./...
 	GOCACHE=/tmp/pulsecity-narrative-gocache go -C services/narrative-service test ./...
+	GOCACHE=/tmp/pulsecity-team-gocache go -C services/team-service test ./...
+	GOCACHE=/tmp/pulsecity-city-gocache go -C services/city-service test ./...
+	GOCACHE=/tmp/pulsecity-analytics-gocache go -C services/analytics-service test ./...
 
 test: test-rust test-go
 
 # Run
 run-gateway:
-	go -C services/gateway run ./cmd/main.go
+	GOCACHE=/tmp/pulsecity-gateway-gocache go -C services/gateway run ./cmd/main.go
+
+run-agent-service:
+	cargo run --manifest-path services/agent-service/Cargo.toml
 
 run-map-service:
 	cargo run --manifest-path services/map-service/Cargo.toml
 
+run-match-service:
+	cargo run --manifest-path services/match-service/Cargo.toml
+
 run-narrative-service:
-	go -C services/narrative-service run ./cmd/main.go
+	GOCACHE=/tmp/pulsecity-narrative-gocache go -C services/narrative-service run ./cmd/main.go
+
+run-team-service:
+	GOCACHE=/tmp/pulsecity-team-gocache go -C services/team-service run ./cmd/main.go
+
+run-city-service:
+	GOCACHE=/tmp/pulsecity-city-gocache go -C services/city-service run ./cmd/main.go
+
+run-analytics-service:
+	GOCACHE=/tmp/pulsecity-analytics-gocache go -C services/analytics-service run ./cmd/main.go
 
 run-frontend:
 	npm run dev --prefix frontend
