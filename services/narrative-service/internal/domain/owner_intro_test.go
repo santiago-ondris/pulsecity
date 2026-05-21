@@ -1,13 +1,9 @@
-package main
+package domain
 
-import (
-	"testing"
-
-	"github.com/pulsecity/services/gateway/internal/domain"
-)
+import "testing"
 
 func TestBuildOwnerIntroEventIncludesInteractiveChoices(t *testing.T) {
-	game := domain.GameSetup{
+	request := OwnerIntroRequestedEvent{
 		GameID:             "game-123",
 		CityName:           "Nueva Aurora",
 		FranchiseName:      "Lighthouses",
@@ -15,7 +11,7 @@ func TestBuildOwnerIntroEventIncludesInteractiveChoices(t *testing.T) {
 		CityManagementMode: "owner_influence",
 	}
 
-	event := buildOwnerIntroEvent(game)
+	event := BuildOwnerIntroEvent(request)
 
 	if event.Type != "narrative.event" {
 		t.Fatalf("expected narrative.event type, got %q", event.Type)

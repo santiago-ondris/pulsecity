@@ -8,11 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pulsecity/services/gateway/internal/domain"
 	httphandlers "github.com/pulsecity/services/gateway/internal/handlers"
 	natsclient "github.com/pulsecity/services/gateway/internal/nats"
@@ -99,18 +97,30 @@ func main() {
 			return
 		}
 
-		event := buildOwnerIntroEvent(game)
-		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-		if err := store.SetOwnerIntroEvent(ctx, currentState.GameID, event); err != nil {
-			log.Printf("persist owner intro event %s: %v", currentState.GameID, err)
-			cancel()
+		request := domain.OwnerIntroRequestedEvent{
+			GameID:             game.GameID,
+			CityName:           game.CityName,
+			FranchiseName:      game.FranchiseName,
+			InitialScenario:    game.InitialScenario,
+			CityManagementMode: game.CityManagementMode,
+		}
+		if err := bus.PublishJSON(domain.SubjectNarrativeOwnerIntroRequested, request); err != nil {
+			log.Printf("publish owner intro request %s: %v", currentState.GameID, err)
+		}
+	}); err != nil {
+		log.Fatalf("subscribe map events: %v", err)
+	}
+
+	if _, err := bus.Subscribe(domain.SubjectNarrativeEventGenerated, func(_ string, data []byte) {
+		var event domain.NarrativeEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode narrative event: %v", err)
 			return
 		}
-		cancel()
 
 		hub.Broadcast(event)
 	}); err != nil {
-		log.Fatalf("subscribe map events: %v", err)
+		log.Fatalf("subscribe narrative events: %v", err)
 	}
 
 	mux := http.NewServeMux()
@@ -143,54 +153,6 @@ func main() {
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("shutdown http: %v", err)
-	}
-}
-
-func buildOwnerIntroEvent(game domain.GameSetup) domain.NarrativeEvent {
-	title := "Llamada del Owner"
-	body := ownerIntroBody(game)
-
-	return domain.NarrativeEvent{
-		EventID: "owner-intro-" + uuid.NewString(),
-		GameID:  game.GameID,
-		Type:    "narrative.event",
-		Subject: "narrativa.owner_intro_generado",
-		Emitter: "owner",
-		Kind:    "owner_intro",
-		Urgency: "critical",
-		Title:   title,
-		Body:    body,
-		Metadata: map[string]string{
-			"city_name":            game.CityName,
-			"franchise_name":       game.FranchiseName,
-			"initial_scenario":     game.InitialScenario,
-			"city_management_mode": game.CityManagementMode,
-		},
-		Choices: []domain.NarrativeChoice{
-			{ID: "build_culture", Label: "Empezá por identidad y cultura"},
-			{ID: "win_now", Label: "Acelerá para competir rapido"},
-			{ID: "city_first", Label: "Usá la franquicia para activar la ciudad"},
-		},
-	}
-}
-
-func ownerIntroBody(game domain.GameSetup) string {
-	franchise := strings.TrimSpace(game.FranchiseName)
-	city := strings.TrimSpace(game.CityName)
-	modeLine := "Quiero que entiendas algo desde el primer dia: esta franquicia y esta ciudad van a empujarse entre si."
-	if game.CityManagementMode == "dual_figure" {
-		modeLine = "Vas a llevar dos sombreros desde el primer dia: la franquicia y la ciudad. No quiero que uses ese poder a medias."
-	}
-
-	switch game.InitialScenario {
-	case "rebuild":
-		return "Te traje a " + city + " para construir con paciencia. " + franchise + " no necesita humo, necesita direccion. " + modeLine + " Si hacemos bien las bases, el resto llega."
-	case "contention":
-		return "No te contraté para aprender en el cargo. " + franchise + " tiene talento, gasto y expectativas encima desde el primer dia. " + modeLine + " Quiero resultados rapido y no pienso disfrazarlo."
-	case "decline":
-		return "Acá todavía pesa demasiado el pasado. " + franchise + " vive bajo la sombra de lo que fue, y la ciudad lo siente. " + modeLine + " Tu trabajo es devolver autoridad antes de que esto se vuelva costumbre."
-	default:
-		return city + " no tiene historia previa que la sostenga; eso es una ventaja y una responsabilidad. " + franchise + " empieza desde cero, y con eso viene libertad real. " + modeLine + " Quiero vision, criterio y una identidad que se note desde el primer movimiento."
 	}
 }
 

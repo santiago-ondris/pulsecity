@@ -1,5 +1,6 @@
 import "./newGame.css";
 
+import { SessionPage } from "./components/SessionPage";
 import { LandingPage } from "./components/LandingPage";
 import { IdentityPage } from "./components/IdentityPage";
 import { ScenarioPage } from "./components/ScenarioPage";
@@ -14,27 +15,37 @@ export function NewGameFlow() {
 
   return (
     <main className="new-game-shell">
-      {flow.currentPage === "home" ? (
-        <LandingPage
+      {flow.currentPage === "session" ? (
+        <SessionPage
           activeAuthKind={flow.activeAuthKind}
           authenticatingUser={flow.authenticatingUser}
           creatingGuestSession={flow.creatingGuestSession}
-          games={flow.games}
           guestToken={flow.guestToken}
           restoringSession={flow.restoringSession}
-          selectedGame={flow.selectedGame}
-          selectedGameId={flow.selectedGameId}
           status={flow.status}
+          userSession={flow.userSession}
           onClearAllAccess={flow.clearAllAccess}
-          onContinueSelectedGame={flow.continueSelectedGame}
           onCreateGuestSession={() => void flow.createGuestSession()}
+          onForgotPassword={flow.forgotPassword}
           onLogin={(email, password) => void flow.login(email, password)}
           onLogoutUser={() => void flow.logoutUser()}
           onRegister={(email, displayName, password) =>
             void flow.register(email, displayName, password)}
+          onSwitchToGuestSession={() => void flow.switchToGuestSession()}
+        />
+      ) : null}
+
+      {flow.currentPage === "home" ? (
+        <LandingPage
+          activeAuthKind={flow.activeAuthKind}
+          games={flow.games}
+          restoringSession={flow.restoringSession}
+          selectedGame={flow.selectedGame}
+          selectedGameId={flow.selectedGameId}
+          onContinueSelectedGame={flow.continueSelectedGame}
+          onLogoutUser={() => void flow.logoutUser()}
           onSelectGame={flow.setSelectedGameId}
           onStart={flow.startNewGame}
-          onSwitchToGuestSession={() => void flow.switchToGuestSession()}
           userSession={flow.userSession}
         />
       ) : null}

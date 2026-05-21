@@ -99,6 +99,7 @@ export const cityManagementModes = [
 export type CityManagementModeId = (typeof cityManagementModes)[number]["id"];
 
 export const flowPages = [
+  "session",
   "home",
   "identity",
   "scenario",
@@ -110,6 +111,7 @@ export const flowPages = [
 export type FlowPage = (typeof flowPages)[number];
 
 export const pagePaths: Record<FlowPage, string> = {
+  session: "/session",
   home: "/",
   identity: "/new-game/identity",
   scenario: "/new-game/scenario",

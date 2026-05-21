@@ -13,6 +13,7 @@ import type {
 } from "../../../types";
 import { clampPage, pageFromPath } from "../helpers";
 import {
+  flowPages,
   initialDraft,
   pagePaths,
   stageMeta,
@@ -36,7 +37,7 @@ const initialMapState: MapClientState = {
 
 export function useNewGameFlow() {
   const [draft, setDraft] = useState<NewGameDraft>(initialDraft);
-  const [currentPage, setCurrentPage] = useState<FlowPage>("home");
+  const [currentPage, setCurrentPage] = useState<FlowPage>("session");
   const [unlockedPage, setUnlockedPage] = useState<FlowPage>("home");
   const [gameId, setGameId] = useState("");
   const [selectedGameId, setSelectedGameId] = useState("");
@@ -94,8 +95,7 @@ export function useNewGameFlow() {
 
   useEffect(() => {
     const requested = pageFromPath(window.location.pathname);
-    const maxUnlockedPage = activeAuthKind !== "none" ? unlockedPage : "home";
-    const safePage = clampPage(requested, maxUnlockedPage);
+    const safePage = resolveAccessiblePage(requested, unlockedPage, activeAuthKind);
     if (safePage !== requested) {
       window.history.replaceState({}, "", pagePaths[safePage]);
     }
@@ -103,7 +103,7 @@ export function useNewGameFlow() {
 
     const handlePopState = () => {
       const rawPage = pageFromPath(window.location.pathname);
-      const nextPage = clampPage(rawPage, activeAuthKind !== "none" ? unlockedPage : "home");
+      const nextPage = resolveAccessiblePage(rawPage, unlockedPage, activeAuthKind);
       if (nextPage !== rawPage) {
         window.history.replaceState({}, "", pagePaths[nextPage]);
       }
@@ -271,6 +271,7 @@ export function useNewGameFlow() {
     if (storedSessionToken) {
       const restored = await restoreUserSession(storedSessionToken);
       if (restored) {
+        syncPage("home", true);
         setRestoringSession(false);
         return;
       }
@@ -279,8 +280,10 @@ export function useNewGameFlow() {
     if (storedGuestToken) {
       await loadGamesForGuest(storedGuestToken, { silentOnSuccess: true });
       setStatus("Sesión invitada restaurada.");
+      syncPage("home", true);
     } else {
       setStatus("Elegí cómo entrar a PulseCity.");
+      syncPage("session", true);
     }
 
     setRestoringSession(false);
@@ -354,6 +357,7 @@ export function useNewGameFlow() {
         setStatus(`Cuenta creada. Sesión iniciada como ${payload.user.display_name}.`);
       }
       await loadGamesForUser(payload.session_token);
+      syncPage("home", true);
       if (upgradeMessage) {
         setStatus(upgradeMessage);
       }
@@ -403,6 +407,7 @@ export function useNewGameFlow() {
         setStatus(`Sesión iniciada como ${payload.user.display_name}.`);
       }
       await loadGamesForUser(payload.session_token);
+      syncPage("home", true);
       if (upgradeMessage) {
         setStatus(upgradeMessage);
       }
@@ -533,10 +538,11 @@ export function useNewGameFlow() {
       return;
     }
 
-    resetRuntimeToHome();
+    resetRuntimeToEntry();
     window.localStorage.removeItem(sessionTokenStorageKey);
     setUserSession(null);
     setStatus("Volviendo al perfil invitado...");
+    syncPage("home", true);
     await loadGamesForGuest(guestToken);
   }
 
@@ -545,12 +551,13 @@ export function useNewGameFlow() {
       return;
     }
 
-    resetRuntimeToHome();
+    resetRuntimeToEntry();
     window.localStorage.removeItem(sessionTokenStorageKey);
     setUserSession(null);
 
     if (guestToken) {
       setStatus("Sesión de cuenta cerrada. Volviendo al invitado guardado...");
+      syncPage("home", true);
       await loadGamesForGuest(guestToken);
       return;
     }
@@ -559,7 +566,7 @@ export function useNewGameFlow() {
   }
 
   function clearAllAccess() {
-    resetRuntimeToHome();
+    resetRuntimeToEntry();
     clearGuestSessionStorage();
     window.localStorage.removeItem(sessionTokenStorageKey);
     setGuestToken("");
@@ -567,6 +574,11 @@ export function useNewGameFlow() {
     setGames([]);
     setSelectedGameId("");
     setStatus("Sesiones locales limpiadas. Elegí cómo entrar a PulseCity.");
+    syncPage("session", true);
+  }
+
+  function forgotPassword() {
+    setStatus("Recuperación de contraseña todavía no implementada en esta etapa.");
   }
 
   async function upgradeGuestOwnership(nextSession: UserSession) {
@@ -789,9 +801,9 @@ export function useNewGameFlow() {
     clearGuestSessionStorage();
     setGuestToken("");
     if (!userSession) {
-      resetRuntimeToHome();
+      resetRuntimeToEntry();
       if (options?.resetNavigation !== false) {
-        syncPage("home", true);
+        syncPage("session", true);
       }
     }
   }
@@ -800,18 +812,19 @@ export function useNewGameFlow() {
     window.localStorage.removeItem(sessionTokenStorageKey);
     setUserSession(null);
     if (options?.preserveGuestFallback && guestToken) {
-      resetRuntimeToHome();
+      resetRuntimeToEntry();
+      syncPage("home", true);
       void loadGamesForGuest(guestToken, { silentOnSuccess: true });
       return;
     }
 
-    resetRuntimeToHome();
+    resetRuntimeToEntry();
     if (options?.resetNavigation !== false) {
-      syncPage("home", true);
+      syncPage("session", true);
     }
   }
 
-  function resetRuntimeToHome() {
+  function resetRuntimeToEntry() {
     socketRef.current?.close();
     setGames([]);
     setSelectedGameId("");
@@ -822,7 +835,6 @@ export function useNewGameFlow() {
     setActiveNarrativeEvent(null);
     setOwnerIntroResponse(null);
     setSocketStatus("Socket inactivo");
-    syncPage("home", true);
   }
 
   const currentStage = stageMeta[mapState.stage] ?? stageMeta.idle;
@@ -859,6 +871,7 @@ export function useNewGameFlow() {
     completeIdentityStep,
     completeManagementStep,
     completeScenarioStep,
+    forgotPassword,
     goBack,
     login,
     logoutUser,
@@ -919,6 +932,23 @@ function isScenarioId(value: string): value is ScenarioId {
 
 function isCityManagementModeId(value: string): value is CityManagementModeId {
   return ["owner_influence", "dual_figure"].includes(value);
+}
+
+function resolveAccessiblePage(
+  requested: FlowPage,
+  unlockedPage: FlowPage,
+  activeAuthKind: "none" | "guest" | "user",
+) {
+  if (activeAuthKind === "none") {
+    return "session";
+  }
+
+  if (requested === "session") {
+    return "home";
+  }
+
+  const maxUnlockedPage = flowPages.includes(unlockedPage) ? unlockedPage : "home";
+  return clampPage(requested, maxUnlockedPage);
 }
 
 function validateRegistrationInput(email: string, displayName: string, password: string) {
