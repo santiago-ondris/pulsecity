@@ -40,6 +40,11 @@ type CityEconomyChangeEvent struct {
 	FanSentimentDelta float64 `json:"fan_sentiment_delta"`
 	TicketSalesDelta  float64 `json:"ticket_sales_delta"`
 	LocalEconomyDelta float64 `json:"local_economy_delta"`
+	FanSentiment      float64 `json:"fan_sentiment"`
+	TicketSalesIndex  float64 `json:"ticket_sales_index"`
+	LocalEconomyIndex float64 `json:"local_economy_index"`
+	WinStreak         uint16  `json:"win_streak"`
+	LossStreak        uint16  `json:"loss_streak"`
 	Reason            string  `json:"reason"`
 }
 
@@ -51,4 +56,22 @@ type CityLandUpdatedEvent struct {
 	NewLandValue   float64 `json:"new_land_value"`
 	SourceEventID  string  `json:"source_event_id"`
 	Reason         string  `json:"reason"`
+}
+
+type CityPatchEvent struct {
+	Type    string         `json:"type"`
+	Subject string         `json:"subject"`
+	GameID  string         `json:"game_id"`
+	Patch   CityStatePatch `json:"patch"`
+}
+
+type CityStatePatch struct {
+	FanSentiment             float64 `json:"fan_sentiment"`
+	TicketSalesIndex         float64 `json:"ticket_sales_index"`
+	LocalEconomyIndex        float64 `json:"local_economy_index"`
+	StadiumDistrictLandValue float64 `json:"stadium_district_land_value"`
+	WinStreak                uint16  `json:"win_streak"`
+	LossStreak               uint16  `json:"loss_streak"`
+	LastMatchID              string  `json:"last_match_id"`
+	Reason                   string  `json:"reason"`
 }

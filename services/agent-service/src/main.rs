@@ -1,8 +1,8 @@
 use agent_service::{
     SERVICE_NAME, database_url_from_env, game_id_from_env, nats_url_from_env, persistence::Store,
+    runtime,
 };
 use anyhow::Context;
-use tokio::signal;
 use tracing::info;
 
 #[tokio::main]
@@ -36,8 +36,9 @@ async fn main() -> anyhow::Result<()> {
         "simulation state loaded"
     );
 
-    signal::ctrl_c().await.context("wait for shutdown signal")?;
-    info!(service = SERVICE_NAME, "shutdown signal received");
+    runtime::run(client.clone(), store, state)
+        .await
+        .context("run simulation loop")?;
 
     drop(client);
     Ok(())

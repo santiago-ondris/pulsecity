@@ -48,6 +48,20 @@ Publicado por `team-service` cuando un partido queda listo para ser simulado por
   "simulated_date": "2026-10-22",
   "home_team": {},
   "away_team": {},
+  "players": [
+    {
+      "player_id": "uuid",
+      "team_id": "pulsecity",
+      "rating": 78,
+      "scoring": 80,
+      "rebounding": 70,
+      "playmaking": 76,
+      "defense": 74,
+      "stamina": 82,
+      "fatigue": 8,
+      "emotional_state": 2
+    }
+  ],
   "seed": 123456789
 }
 ```

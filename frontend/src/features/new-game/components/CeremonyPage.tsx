@@ -1,7 +1,13 @@
 import type { CSSProperties } from "react";
 
 import skylineBackdrop from "../../assets/landing-city-night.svg";
-import type { MapClientState, RealtimeEvent } from "../../../types";
+import type {
+  CityClientState,
+  MapClientState,
+  RealtimeEvent,
+  SeasonClientState,
+  TimeClientState,
+} from "../../../types";
 import { stageMeta, stageSequence } from "../constants";
 import {
   buildCellClassName,
@@ -19,10 +25,15 @@ interface CeremonyPageProps {
   };
   events: RealtimeEvent[];
   gameId: string;
+  cityState: CityClientState;
   mapState: MapClientState;
   ownerIntroResponseLabel: string | null;
+  seasonState: SeasonClientState;
   socketStatus: string;
   status: string;
+  timeState: TimeClientState;
+  onSetPaused: (paused: boolean) => void;
+  onSetSpeed: (speed: 1 | 5 | 20) => void;
 }
 
 export function CeremonyPage(props: CeremonyPageProps) {
@@ -68,7 +79,15 @@ export function CeremonyPage(props: CeremonyPageProps) {
           </div>
 
           <div className="ceremony-world__frame">
-            <div className="map-grid" style={gridColumns(props.mapState.map_data?.width ?? 1)}>
+            <div
+              className={[
+                "map-grid",
+                props.cityState.last_match_id ? "map-grid--city-pulse" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={gridColumns(props.mapState.map_data?.width ?? 1)}
+            >
               {(props.mapState.map_data?.cells ?? []).flatMap((row, y) =>
                 row.map((cell, x) => {
                   const classes = buildCellClassName({
@@ -95,10 +114,54 @@ export function CeremonyPage(props: CeremonyPageProps) {
         </section>
 
         <aside className="ceremony-control">
+          <section className="ceremony-panel time-hud-panel">
+            <div className="time-hud__header">
+              <div>
+                <p className="eyebrow">Tiempo simulado</p>
+                <strong>{formatSimulatedDate(props.timeState.simulated_date)}</strong>
+              </div>
+              <span className={props.timeState.paused ? "time-hud__badge paused" : "time-hud__badge"}>
+                {props.timeState.paused ? "Pausa" : `x${props.timeState.speed}`}
+              </span>
+            </div>
+
+            <div className="time-hud__controls" aria-label="Controles de tiempo">
+              <button
+                type="button"
+                className={props.timeState.paused ? "active" : ""}
+                onClick={() => props.onSetPaused(true)}
+              >
+                Pausa
+              </button>
+              {[1, 5, 20].map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  className={!props.timeState.paused && props.timeState.speed === speed ? "active" : ""}
+                  onClick={() => props.onSetSpeed(speed as 1 | 5 | 20)}
+                >
+                  x{speed}
+                </button>
+              ))}
+            </div>
+          </section>
+
           <section className="ceremony-panel">
             <p className="eyebrow">Estado</p>
             <div className="ceremony-state-grid">
               <StateItem label="Partida" value={formatGameId(props.mapState.game_id || props.gameId)} />
+              <StateItem
+                label="Record"
+                value={`${props.seasonState.wins}-${props.seasonState.losses}`}
+              />
+              <StateItem
+                label="Ciudad"
+                value={`${Math.round(props.cityState.fan_sentiment)} ánimo / ${Math.round(props.cityState.stadium_district_land_value)} suelo`}
+              />
+              <StateItem
+                label="Entradas"
+                value={`${Math.round(props.cityState.ticket_sales_index)} demanda`}
+              />
               <StateItem label="Sistema" value={props.status} />
               <StateItem
                 label="Owner"
@@ -155,6 +218,20 @@ export function CeremonyPage(props: CeremonyPageProps) {
       </main>
     </section>
   );
+}
+
+function formatSimulatedDate(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("es", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function StateItem({ label, value }: { label: string; value: string }) {

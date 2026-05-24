@@ -50,6 +50,20 @@ func TestGuestOwnsGame(t *testing.T) {
 	}
 }
 
+func TestValidTimeSpeed(t *testing.T) {
+	for _, speed := range []uint8{1, 5, 20} {
+		if !validTimeSpeed(speed) {
+			t.Fatalf("expected speed %d to be valid", speed)
+		}
+	}
+
+	for _, speed := range []uint8{0, 2, 21} {
+		if validTimeSpeed(speed) {
+			t.Fatalf("expected speed %d to be invalid", speed)
+		}
+	}
+}
+
 func TestGameOwnedByUser(t *testing.T) {
 	game := domain.GameSetup{GameID: "game-1", UserID: "user_123"}
 	currentActor := actor{

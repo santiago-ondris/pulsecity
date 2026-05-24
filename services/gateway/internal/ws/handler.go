@@ -13,21 +13,29 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, onConnect func(*websocket.Conn) error) {
+func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, onConnect func(*websocket.Conn) (func(), error)) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("upgrade websocket: %v", err)
 		return
 	}
 
+	var onDisconnect func()
 	h.add(conn)
-	defer h.remove(conn)
+	defer func() {
+		if onDisconnect != nil {
+			onDisconnect()
+		}
+		h.remove(conn)
+	}()
 
 	if onConnect != nil {
-		if err := onConnect(conn); err != nil {
+		disconnect, err := onConnect(conn)
+		if err != nil {
 			log.Printf("initialize websocket: %v", err)
 			return
 		}
+		onDisconnect = disconnect
 	}
 
 	for {

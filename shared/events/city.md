@@ -23,6 +23,11 @@ Publicado por `city-service` como reaccion a hechos del juego, principalmente `p
   "fan_sentiment_delta": 0.04,
   "ticket_sales_delta": 0.03,
   "local_economy_delta": 0.01,
+  "fan_sentiment": 58,
+  "ticket_sales_index": 57,
+  "local_economy_index": 53.5,
+  "win_streak": 1,
+  "loss_streak": 0,
   "reason": "home_win|home_loss|winning_streak|losing_streak"
 }
 ```
@@ -50,4 +55,26 @@ Notas:
 
 - M2 usa metricas globales y zona del estadio.
 - `city-service` reacciona a hechos publicados; no recibe ordenes directas de `match-service`.
-- el `gateway` traduce estos eventos a `city.patch`.
+- `city-service` publica `city.patch` como delta WebSocket y `gateway` lo reenvia.
+
+## `city.patch`
+
+Delta WebSocket publicado por `city-service` y reenviado por `gateway` cuando cambia el estado urbano agregado.
+
+```json
+{
+  "type": "city.patch",
+  "subject": "city.patch",
+  "game_id": "uuid",
+  "patch": {
+    "fan_sentiment": 58,
+    "ticket_sales_index": 57,
+    "local_economy_index": 53.5,
+    "stadium_district_land_value": 101.5,
+    "win_streak": 3,
+    "loss_streak": 0,
+    "last_match_id": "uuid",
+    "reason": "home_win_winning_streak"
+  }
+}
+```

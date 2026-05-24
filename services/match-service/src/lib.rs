@@ -1,6 +1,8 @@
 //! Core scaffolding for PulseCity's match-service.
 
 pub mod events;
+pub mod runtime;
+pub mod simulator;
 
 pub const SERVICE_NAME: &str = "match-service";
 pub const DEFAULT_NATS_URL: &str = "nats://127.0.0.1:4222";

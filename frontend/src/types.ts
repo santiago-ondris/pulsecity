@@ -47,6 +47,89 @@ export interface MapPatchEnvelope {
   patch: MapStatePatch;
 }
 
+export interface TimeClientState {
+  simulated_date: string;
+  speed: 1 | 5 | 20;
+  paused: boolean;
+  days_processed: number;
+}
+
+export interface TimeStatePatch {
+  simulated_date?: string;
+  speed?: 1 | 5 | 20;
+  paused?: boolean;
+  days_processed?: number;
+}
+
+export interface TimePatchEnvelope {
+  type: "time.patch";
+  subject: string;
+  game_id: string;
+  patch: TimeStatePatch;
+}
+
+export interface SeasonClientState {
+  wins: number;
+  losses: number;
+  points_for: number;
+  points_against: number;
+  last_result?: SeasonMatchSummary;
+}
+
+export interface SeasonMatchSummary {
+  match_id: string;
+  simulated_date: string;
+  home_team_id: string;
+  away_team_id: string;
+  home_score: number;
+  away_score: number;
+  winner_team_id: string;
+}
+
+export interface SeasonStatePatch {
+  wins?: number;
+  losses?: number;
+  points_for?: number;
+  points_against?: number;
+  last_result?: SeasonMatchSummary;
+}
+
+export interface SeasonPatchEnvelope {
+  type: "season.patch";
+  subject: string;
+  game_id: string;
+  patch: SeasonStatePatch;
+}
+
+export interface CityClientState {
+  fan_sentiment: number;
+  ticket_sales_index: number;
+  local_economy_index: number;
+  stadium_district_land_value: number;
+  win_streak: number;
+  loss_streak: number;
+  last_match_id?: string;
+  reason?: string;
+}
+
+export interface CityStatePatch {
+  fan_sentiment?: number;
+  ticket_sales_index?: number;
+  local_economy_index?: number;
+  stadium_district_land_value?: number;
+  win_streak?: number;
+  loss_streak?: number;
+  last_match_id?: string;
+  reason?: string;
+}
+
+export interface CityPatchEnvelope {
+  type: "city.patch";
+  subject: string;
+  game_id: string;
+  patch: CityStatePatch;
+}
+
 export interface NarrativeChoice {
   id: string;
   label: string;
@@ -80,6 +163,9 @@ export interface NarrativeResponseEvent {
 export type RealtimeEvent =
   | MapSnapshotEnvelope
   | MapPatchEnvelope
+  | TimePatchEnvelope
+  | SeasonPatchEnvelope
+  | CityPatchEnvelope
   | NarrativeEvent
   | NarrativeResponseEvent;
 

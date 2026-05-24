@@ -19,3 +19,35 @@ func TestEventSubjects(t *testing.T) {
 		t.Fatalf("SubjectMatchFinished = %q", tests["match finished"])
 	}
 }
+
+func TestSeasonPatchFromRecord(t *testing.T) {
+	record := SeasonRecord{
+		GameID:        "game-1",
+		Wins:          3,
+		Losses:        2,
+		PointsFor:     550,
+		PointsAgainst: 540,
+		LastResult: &SeasonMatchSummary{
+			MatchID:       "match-1",
+			SimulatedDate: "2026-10-22",
+			HomeScore:     110,
+			AwayScore:     101,
+			WinnerTeamID:  OwnTeamID,
+		},
+	}
+
+	event := SeasonPatchFromRecord(record)
+
+	if event.Type != SubjectSeasonPatchDelta {
+		t.Fatalf("SeasonPatchFromRecord() Type = %q, want %q", event.Type, SubjectSeasonPatchDelta)
+	}
+	if event.GameID != "game-1" {
+		t.Fatalf("SeasonPatchFromRecord() GameID = %q, want game-1", event.GameID)
+	}
+	if event.Patch.Wins != 3 {
+		t.Fatalf("SeasonPatchFromRecord() wins = %d, want 3", event.Patch.Wins)
+	}
+	if event.Patch.LastResult == nil {
+		t.Fatal("SeasonPatchFromRecord() LastResult = nil, want result")
+	}
+}

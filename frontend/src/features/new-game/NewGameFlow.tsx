@@ -102,10 +102,15 @@ export function NewGameFlow() {
           currentStage={flow.currentStage}
           events={flow.events}
           gameId={flow.gameId}
+          cityState={flow.cityState}
           mapState={flow.mapState}
           ownerIntroResponseLabel={flow.ownerIntroResponse?.label ?? null}
+          seasonState={flow.seasonState}
           socketStatus={flow.socketStatus}
           status={flow.status}
+          timeState={flow.timeState}
+          onSetPaused={(paused) => void flow.updateTimeControl({ paused })}
+          onSetSpeed={(speed) => void flow.updateTimeControl({ speed, paused: false })}
         />
       ) : null}
 

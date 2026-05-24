@@ -15,9 +15,16 @@ Contrato mínimo del vertical slice entre `gateway` y `map-service`.
 ```json
 {
   "game_id": "uuid",
-  "city_name": "string opcional"
+  "city_name": "string opcional",
+  "franchise_name": "string opcional",
+  "abbreviation": "string opcional"
 }
 ```
+
+Notas:
+
+- `map-service` solo necesita `game_id` y `city_name`.
+- `team-service` consume el mismo evento para inicializar franquicia, roster y temporada. Por eso `franchise_name` y `abbreviation` viajan en el payload aunque no afecten la generacion del mapa.
 
 ## Payload de progreso
 

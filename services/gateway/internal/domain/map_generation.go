@@ -27,8 +27,10 @@ type GuestSession struct {
 }
 
 type MapGenerationRequest struct {
-	GameID   string `json:"game_id"`
-	CityName string `json:"city_name,omitempty"`
+	GameID        string `json:"game_id"`
+	CityName      string `json:"city_name,omitempty"`
+	FranchiseName string `json:"franchise_name,omitempty"`
+	Abbreviation  string `json:"abbreviation,omitempty"`
 }
 
 type GameSetup struct {
@@ -149,4 +151,112 @@ type MapStatePatch struct {
 	Message  *string    `json:"message,omitempty"`
 	MapData  *MapData   `json:"map_data,omitempty"`
 	Stadium  *GridPoint `json:"stadium,omitempty"`
+}
+
+const (
+	SubjectTimeSessionStarted = "tiempo.sesion_iniciada"
+	SubjectTimeSessionEnded   = "tiempo.sesion_terminada"
+	SubjectTimeSpeedChanged   = "tiempo.velocidad_cambiada"
+	SubjectTimePauseChanged   = "tiempo.pausa_activada"
+	SubjectTimeDayAdvanced    = "tiempo.dia_avanzado"
+	SubjectSeasonPatchDelta   = "season.patch"
+	SubjectCityPatchDelta     = "city.patch"
+)
+
+type EventMeta struct {
+	EventID       string `json:"event_id"`
+	GameID        string `json:"game_id"`
+	OccurredAt    string `json:"occurred_at"`
+	SchemaVersion uint16 `json:"schema_version"`
+}
+
+type TimeSessionStartedEvent struct {
+	EventMeta
+	SessionID string `json:"session_id"`
+	ClientID  string `json:"client_id"`
+}
+
+type TimeSessionEndedEvent struct {
+	EventMeta
+	SessionID string `json:"session_id"`
+	Reason    string `json:"reason"`
+}
+
+type TimeSpeedChangedEvent struct {
+	EventMeta
+	Speed uint8 `json:"speed"`
+}
+
+type TimePauseChangedEvent struct {
+	EventMeta
+	Paused bool `json:"paused"`
+}
+
+type TimeDayAdvancedEvent struct {
+	EventMeta
+	SimulatedDate string `json:"simulated_date"`
+	Speed         uint8  `json:"speed"`
+	DaysProcessed uint16 `json:"days_processed"`
+}
+
+type TimeControlRequest struct {
+	Speed  *uint8 `json:"speed,omitempty"`
+	Paused *bool  `json:"paused,omitempty"`
+}
+
+type TimePatchEnvelope struct {
+	Type    string         `json:"type"`
+	Subject string         `json:"subject"`
+	GameID  string         `json:"game_id"`
+	Patch   TimeStatePatch `json:"patch"`
+}
+
+type TimeStatePatch struct {
+	SimulatedDate *string `json:"simulated_date,omitempty"`
+	Speed         *uint8  `json:"speed,omitempty"`
+	Paused        *bool   `json:"paused,omitempty"`
+	DaysProcessed *uint16 `json:"days_processed,omitempty"`
+}
+
+type SeasonPatchEnvelope struct {
+	Type    string           `json:"type"`
+	Subject string           `json:"subject"`
+	GameID  string           `json:"game_id"`
+	Patch   SeasonStatePatch `json:"patch"`
+}
+
+type SeasonStatePatch struct {
+	Wins          uint16              `json:"wins"`
+	Losses        uint16              `json:"losses"`
+	PointsFor     uint16              `json:"points_for"`
+	PointsAgainst uint16              `json:"points_against"`
+	LastResult    *SeasonMatchSummary `json:"last_result,omitempty"`
+}
+
+type SeasonMatchSummary struct {
+	MatchID       string `json:"match_id"`
+	SimulatedDate string `json:"simulated_date"`
+	HomeTeamID    string `json:"home_team_id"`
+	AwayTeamID    string `json:"away_team_id"`
+	HomeScore     uint16 `json:"home_score"`
+	AwayScore     uint16 `json:"away_score"`
+	WinnerTeamID  string `json:"winner_team_id"`
+}
+
+type CityPatchEnvelope struct {
+	Type    string         `json:"type"`
+	Subject string         `json:"subject"`
+	GameID  string         `json:"game_id"`
+	Patch   CityStatePatch `json:"patch"`
+}
+
+type CityStatePatch struct {
+	FanSentiment             float64 `json:"fan_sentiment"`
+	TicketSalesIndex         float64 `json:"ticket_sales_index"`
+	LocalEconomyIndex        float64 `json:"local_economy_index"`
+	StadiumDistrictLandValue float64 `json:"stadium_district_land_value"`
+	WinStreak                uint16  `json:"win_streak"`
+	LossStreak               uint16  `json:"loss_streak"`
+	LastMatchID              string  `json:"last_match_id"`
+	Reason                   string  `json:"reason"`
 }

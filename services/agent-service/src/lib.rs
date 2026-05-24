@@ -2,6 +2,7 @@
 
 pub mod events;
 pub mod persistence;
+pub mod runtime;
 pub mod simulation;
 
 pub const SERVICE_NAME: &str = "agent-service";

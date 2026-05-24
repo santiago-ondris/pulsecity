@@ -7,14 +7,21 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type gameSession struct {
+	count     int
+	sessionID string
+}
+
 type Hub struct {
-	mu      sync.Mutex
-	clients map[*websocket.Conn]struct{}
+	mu           sync.Mutex
+	clients      map[*websocket.Conn]struct{}
+	gameSessions map[string]gameSession
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients: make(map[*websocket.Conn]struct{}),
+		clients:      make(map[*websocket.Conn]struct{}),
+		gameSessions: make(map[string]gameSession),
 	}
 }
 
@@ -44,4 +51,37 @@ func (h *Hub) remove(conn *websocket.Conn) {
 
 	_ = conn.Close()
 	delete(h.clients, conn)
+}
+
+func (h *Hub) ActivateGame(gameID, sessionID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	session := h.gameSessions[gameID]
+	if session.count == 0 {
+		session.sessionID = sessionID
+	}
+	session.count++
+	h.gameSessions[gameID] = session
+
+	return session.count == 1
+}
+
+func (h *Hub) DeactivateGame(gameID string) (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	session, ok := h.gameSessions[gameID]
+	if !ok {
+		return "", false
+	}
+
+	session.count--
+	if session.count > 0 {
+		h.gameSessions[gameID] = session
+		return session.sessionID, false
+	}
+
+	delete(h.gameSessions, gameID)
+	return session.sessionID, true
 }

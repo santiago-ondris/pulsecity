@@ -123,6 +123,51 @@ func main() {
 		log.Fatalf("subscribe narrative events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectTimeDayAdvanced, func(subject string, data []byte) {
+		var event domain.TimeDayAdvancedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode time event %s: %v", subject, err)
+			return
+		}
+
+		hub.Broadcast(domain.TimePatchEnvelope{
+			Type:    "time.patch",
+			Subject: subject,
+			GameID:  event.GameID,
+			Patch: domain.TimeStatePatch{
+				SimulatedDate: &event.SimulatedDate,
+				Speed:         &event.Speed,
+				DaysProcessed: &event.DaysProcessed,
+			},
+		})
+	}); err != nil {
+		log.Fatalf("subscribe time events: %v", err)
+	}
+
+	if _, err := bus.Subscribe(domain.SubjectSeasonPatchDelta, func(_ string, data []byte) {
+		var event domain.SeasonPatchEnvelope
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode season patch: %v", err)
+			return
+		}
+
+		hub.Broadcast(event)
+	}); err != nil {
+		log.Fatalf("subscribe season patch events: %v", err)
+	}
+
+	if _, err := bus.Subscribe(domain.SubjectCityPatchDelta, func(_ string, data []byte) {
+		var event domain.CityPatchEnvelope
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode city patch: %v", err)
+			return
+		}
+
+		hub.Broadcast(event)
+	}); err != nil {
+		log.Fatalf("subscribe city patch events: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
 		Bus:       bus,

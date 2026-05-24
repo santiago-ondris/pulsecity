@@ -12,4 +12,7 @@ func TestEventSubjects(t *testing.T) {
 	if SubjectCityLandUpdated != "ciudad.suelo_actualizado" {
 		t.Fatalf("SubjectCityLandUpdated = %q", SubjectCityLandUpdated)
 	}
+	if SubjectCityPatchDelta != "city.patch" {
+		t.Fatalf("SubjectCityPatchDelta = %q", SubjectCityPatchDelta)
+	}
 }

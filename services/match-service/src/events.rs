@@ -20,6 +20,7 @@ pub struct MatchScheduledEvent {
     pub simulated_date: String,
     pub home_team: MatchTeam,
     pub away_team: MatchTeam,
+    pub players: Vec<MatchPlayer>,
     pub seed: u64,
 }
 
@@ -57,6 +58,20 @@ pub struct MatchTeam {
     pub defense_rating: u8,
     pub pace: u8,
     pub home_court_advantage: i8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchPlayer {
+    pub player_id: String,
+    pub team_id: String,
+    pub rating: u8,
+    pub scoring: u8,
+    pub rebounding: u8,
+    pub playmaking: u8,
+    pub defense: u8,
+    pub stamina: u8,
+    pub fatigue: u8,
+    pub emotional_state: i8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

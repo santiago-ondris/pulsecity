@@ -84,6 +84,20 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return event.state.message;
   }
 
+  if (event.type === "time.patch") {
+    return event.patch.simulated_date
+      ? `Fecha simulada ${event.patch.simulated_date}`
+      : "Control de tiempo actualizado";
+  }
+
+  if (event.type === "season.patch") {
+    return `${event.patch.wins ?? 0}-${event.patch.losses ?? 0}`;
+  }
+
+  if (event.type === "city.patch") {
+    return event.patch.reason ?? "Pulso urbano actualizado";
+  }
+
   return event.patch.message ?? "Patch recibido";
 }
 

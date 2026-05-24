@@ -37,6 +37,7 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /api/v1/games/{gameID}", deps.getGame)
 	mux.HandleFunc("POST /api/v1/games/{gameID}/owner-intro-response", deps.answerOwnerIntro)
 	mux.HandleFunc("GET /api/v1/games/{gameID}/snapshot", deps.getSnapshot)
+	mux.HandleFunc("POST /api/v1/games/{gameID}/time-control", deps.updateTimeControl)
 }
 
 func debugPage(w http.ResponseWriter, _ *http.Request) {
@@ -55,46 +56,46 @@ func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 	gameID := r.URL.Query().Get("game_id")
 	guestToken := strings.TrimSpace(r.URL.Query().Get("guest_token"))
 	sessionToken := strings.TrimSpace(r.URL.Query().Get("session_token"))
-	d.Hub.ServeWebSocket(w, r, func(conn *websocket.Conn) error {
+	d.Hub.ServeWebSocket(w, r, func(conn *websocket.Conn) (func(), error) {
 		if gameID == "" {
-			return nil
+			return nil, nil
 		}
 		if sessionToken != "" && guestToken != "" {
-			return nil
+			return nil, nil
 		}
 
 		game, found, err := d.Store.GetGame(r.Context(), gameID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !found {
-			return nil
+			return nil, nil
 		}
 		if sessionToken != "" {
 			ok, err := d.Store.TouchUserSession(r.Context(), sessionToken)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !ok {
-				return nil
+				return nil, nil
 			}
 			session, sessionFound, err := d.Store.GetUserSession(r.Context(), sessionToken)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !sessionFound || game.UserID != session.User.UserID {
-				return nil
+				return nil, nil
 			}
 		} else {
 			ok, err := d.Store.TouchGuestSession(r.Context(), guestToken)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !ok {
-				return nil
+				return nil, nil
 			}
 			if !guestOwnsGame(guestToken, game) {
-				return nil
+				return nil, nil
 			}
 		}
 
@@ -102,20 +103,155 @@ func (d Dependencies) serveWebSocket(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			rehydrated, found, err := d.Store.GetSnapshot(r.Context(), gameID)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !found {
-				return nil
+				return nil, nil
 			}
 			d.Snapshots.Set(rehydrated)
 			snapshot = rehydrated
 		}
 
-		return conn.WriteJSON(domain.MapSnapshotEnvelope{
+		if err := conn.WriteJSON(domain.MapSnapshotEnvelope{
 			Type:    "map.snapshot",
 			Subject: "gateway.snapshot_rehidratado",
 			State:   snapshot,
+		}); err != nil {
+			return nil, err
+		}
+
+		simulationSessionID := uuid.NewString()
+		if d.Hub.ActivateGame(gameID, simulationSessionID) {
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			if err := d.Bus.PublishJSON(domain.SubjectTimeSessionStarted, domain.TimeSessionStartedEvent{
+				EventMeta: domain.EventMeta{
+					EventID:       uuid.NewString(),
+					GameID:        gameID,
+					OccurredAt:    now,
+					SchemaVersion: 1,
+				},
+				SessionID: simulationSessionID,
+				ClientID:  clientIDFromRequest(r),
+			}); err != nil {
+				d.Hub.DeactivateGame(gameID)
+				return nil, err
+			}
+		}
+
+		return func() {
+			activeSessionID, isLastConnection := d.Hub.DeactivateGame(gameID)
+			if !isLastConnection {
+				return
+			}
+			if err := d.Bus.PublishJSON(domain.SubjectTimeSessionEnded, domain.TimeSessionEndedEvent{
+				EventMeta: domain.EventMeta{
+					EventID:       uuid.NewString(),
+					GameID:        gameID,
+					OccurredAt:    time.Now().UTC().Format(time.RFC3339Nano),
+					SchemaVersion: 1,
+				},
+				SessionID: activeSessionID,
+				Reason:    "client_closed",
+			}); err != nil {
+				// No se puede responder al cliente durante el cierre del socket; loguear alcanza.
+				// El siguiente connect volvera a activar la sesion.
+				_ = err
+			}
+		}, nil
+	})
+}
+
+func (d Dependencies) updateTimeControl(w http.ResponseWriter, r *http.Request) {
+	currentActor, ok := d.requireActor(w, r)
+	if !ok {
+		return
+	}
+
+	gameID := r.PathValue("gameID")
+	if gameID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing game id",
 		})
+		return
+	}
+
+	game, found, err := d.Store.GetGame(r.Context(), gameID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load game",
+		})
+		return
+	}
+	if !found || !gameOwnedBy(currentActor, game) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "game not found",
+		})
+		return
+	}
+
+	var request domain.TimeControlRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&request)
+	}
+	if request.Speed == nil && request.Paused == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing time control change",
+		})
+		return
+	}
+	if request.Speed != nil && !validTimeSpeed(*request.Speed) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid speed",
+		})
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if request.Speed != nil {
+		if err := d.Bus.PublishJSON(domain.SubjectTimeSpeedChanged, domain.TimeSpeedChangedEvent{
+			EventMeta: domain.EventMeta{
+				EventID:       uuid.NewString(),
+				GameID:        gameID,
+				OccurredAt:    now,
+				SchemaVersion: 1,
+			},
+			Speed: *request.Speed,
+		}); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{
+				"error": "failed to publish speed change",
+			})
+			return
+		}
+	}
+	if request.Paused != nil {
+		if err := d.Bus.PublishJSON(domain.SubjectTimePauseChanged, domain.TimePauseChangedEvent{
+			EventMeta: domain.EventMeta{
+				EventID:       uuid.NewString(),
+				GameID:        gameID,
+				OccurredAt:    now,
+				SchemaVersion: 1,
+			},
+			Paused: *request.Paused,
+		}); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{
+				"error": "failed to publish pause change",
+			})
+			return
+		}
+	}
+
+	d.Hub.Broadcast(domain.TimePatchEnvelope{
+		Type:    "time.patch",
+		Subject: "gateway.time_control",
+		GameID:  gameID,
+		Patch: domain.TimeStatePatch{
+			Speed:  request.Speed,
+			Paused: request.Paused,
+		},
+	})
+
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "time_control_published",
 	})
 }
 
@@ -131,8 +267,10 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	command := domain.MapGenerationRequest{
-		GameID:   uuid.NewString(),
-		CityName: request.CityName,
+		GameID:        uuid.NewString(),
+		CityName:      request.CityName,
+		FranchiseName: request.FranchiseName,
+		Abbreviation:  request.Abbreviation,
 	}
 
 	setup := domain.GameSetup{
@@ -150,6 +288,8 @@ func (d Dependencies) startGame(w http.ResponseWriter, r *http.Request) {
 		Status:             "generation_started",
 	}
 	command.CityName = setup.CityName
+	command.FranchiseName = setup.FranchiseName
+	command.Abbreviation = setup.Abbreviation
 
 	if err := d.Store.CreateGame(r.Context(), setup); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
@@ -406,6 +546,21 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 
 func guestTokenFromRequest(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-Guest-Token"))
+}
+
+func clientIDFromRequest(r *http.Request) string {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+		return forwarded
+	}
+	if r.RemoteAddr != "" {
+		return r.RemoteAddr
+	}
+
+	return "browser"
+}
+
+func validTimeSpeed(speed uint8) bool {
+	return speed == 1 || speed == 5 || speed == 20
 }
 
 func guestOwnsGame(guestToken string, game domain.GameSetup) bool {

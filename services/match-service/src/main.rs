@@ -1,6 +1,5 @@
 use anyhow::Context;
-use match_service::{SERVICE_NAME, nats_url_from_env};
-use tokio::signal;
+use match_service::{SERVICE_NAME, nats_url_from_env, runtime};
 use tracing::info;
 
 #[tokio::main]
@@ -17,8 +16,9 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("connect nats at {nats_url}"))?;
 
     info!(service = SERVICE_NAME, nats_url, "connected to nats");
-    signal::ctrl_c().await.context("wait for shutdown signal")?;
-    info!(service = SERVICE_NAME, "shutdown signal received");
+    runtime::run(client.clone())
+        .await
+        .context("run match-service runtime")?;
 
     drop(client);
     Ok(())

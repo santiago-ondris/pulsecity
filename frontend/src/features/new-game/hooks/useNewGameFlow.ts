@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
+  CityClientState,
   GameSetup,
   GameSummary,
   GuestSession,
@@ -9,6 +10,8 @@ import type {
   NarrativeChoice,
   NarrativeEvent,
   RealtimeEvent,
+  SeasonClientState,
+  TimeClientState,
   UserSession,
 } from "../../../types";
 import { clampPage, pageFromPath } from "../helpers";
@@ -35,6 +38,29 @@ const initialMapState: MapClientState = {
   message: "Esperando la orden de fundacion.",
 };
 
+const initialTimeState: TimeClientState = {
+  simulated_date: "2026-10-01",
+  speed: 1,
+  paused: true,
+  days_processed: 0,
+};
+
+const initialSeasonState: SeasonClientState = {
+  wins: 0,
+  losses: 0,
+  points_for: 0,
+  points_against: 0,
+};
+
+const initialCityState: CityClientState = {
+  fan_sentiment: 50,
+  ticket_sales_index: 50,
+  local_economy_index: 50,
+  stadium_district_land_value: 100,
+  win_streak: 0,
+  loss_streak: 0,
+};
+
 export function useNewGameFlow() {
   const [draft, setDraft] = useState<NewGameDraft>(initialDraft);
   const [currentPage, setCurrentPage] = useState<FlowPage>("session");
@@ -47,6 +73,9 @@ export function useNewGameFlow() {
   const [status, setStatus] = useState("Elegí cómo entrar a PulseCity.");
   const [socketStatus, setSocketStatus] = useState("Socket inactivo");
   const [mapState, setMapState] = useState<MapClientState>(initialMapState);
+  const [timeState, setTimeState] = useState<TimeClientState>(initialTimeState);
+  const [seasonState, setSeasonState] = useState<SeasonClientState>(initialSeasonState);
+  const [cityState, setCityState] = useState<CityClientState>(initialCityState);
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
   const [activeNarrativeEvent, setActiveNarrativeEvent] = useState<NarrativeEvent | null>(null);
   const [ownerIntroResponse, setOwnerIntroResponse] = useState<NarrativeChoice | null>(null);
@@ -154,6 +183,42 @@ export function useNewGameFlow() {
     if (payload.type === "map.snapshot") {
       setMapState(payload.state);
       setGameId(payload.state.game_id);
+      return;
+    }
+
+    if (payload.type === "time.patch") {
+      setTimeState((current) => ({
+        simulated_date: payload.patch.simulated_date ?? current.simulated_date,
+        speed: payload.patch.speed ?? current.speed,
+        paused: payload.patch.paused ?? current.paused,
+        days_processed: payload.patch.days_processed ?? current.days_processed,
+      }));
+      return;
+    }
+
+    if (payload.type === "season.patch") {
+      setSeasonState((current) => ({
+        wins: payload.patch.wins ?? current.wins,
+        losses: payload.patch.losses ?? current.losses,
+        points_for: payload.patch.points_for ?? current.points_for,
+        points_against: payload.patch.points_against ?? current.points_against,
+        last_result: payload.patch.last_result ?? current.last_result,
+      }));
+      return;
+    }
+
+    if (payload.type === "city.patch") {
+      setCityState((current) => ({
+        fan_sentiment: payload.patch.fan_sentiment ?? current.fan_sentiment,
+        ticket_sales_index: payload.patch.ticket_sales_index ?? current.ticket_sales_index,
+        local_economy_index: payload.patch.local_economy_index ?? current.local_economy_index,
+        stadium_district_land_value:
+          payload.patch.stadium_district_land_value ?? current.stadium_district_land_value,
+        win_streak: payload.patch.win_streak ?? current.win_streak,
+        loss_streak: payload.patch.loss_streak ?? current.loss_streak,
+        last_match_id: payload.patch.last_match_id ?? current.last_match_id,
+        reason: payload.patch.reason ?? current.reason,
+      }));
       return;
     }
 
@@ -466,6 +531,7 @@ export function useNewGameFlow() {
     setStatus(`Fundando ${draft.cityName} ${draft.franchiseName}...`);
     setEvents([]);
     setMapState(initialMapState);
+    setCityState(initialCityState);
     setOwnerIntroResponse(null);
     setActiveNarrativeEvent(null);
 
@@ -797,6 +863,37 @@ export function useNewGameFlow() {
     }
   }
 
+  async function updateTimeControl(next: { speed?: 1 | 5 | 20; paused?: boolean }) {
+    if (!gameId || activeAuthKind === "none") {
+      setStatus("Necesitás una partida activa para controlar el tiempo.");
+      return;
+    }
+
+    setTimeState((current) => ({
+      ...current,
+      speed: next.speed ?? current.speed,
+      paused: next.paused ?? current.paused,
+    }));
+
+    try {
+      const response = await fetch(`${gatewayBaseUrl}/api/v1/games/${gameId}/time-control`, {
+        method: "POST",
+        headers: buildAuthHeaders({
+          guestToken,
+          sessionToken: userSession?.session_token,
+          includeContentType: true,
+        }),
+        body: JSON.stringify(next),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setStatus(payload.error ?? "No se pudo cambiar el tiempo.");
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Fallo de red al cambiar el tiempo.");
+    }
+  }
+
   function clearGuestSession(options?: { resetNavigation?: boolean }) {
     clearGuestSessionStorage();
     setGuestToken("");
@@ -831,6 +928,9 @@ export function useNewGameFlow() {
     setUnlockedPage("home");
     setGameId("");
     setMapState(initialMapState);
+    setTimeState(initialTimeState);
+    setSeasonState(initialSeasonState);
+    setCityState(initialCityState);
     setEvents([]);
     setActiveNarrativeEvent(null);
     setOwnerIntroResponse(null);
@@ -848,6 +948,7 @@ export function useNewGameFlow() {
     creatingGuestSession,
     currentPage,
     currentStage,
+    cityState,
     draft,
     events,
     gameId,
@@ -858,9 +959,11 @@ export function useNewGameFlow() {
     restoringSession,
     selectedGame,
     selectedGameId,
+    seasonState,
     socketStatus,
     status,
     submittingNarrativeChoice,
+    timeState,
     userSession,
     updateDraft,
     continueSelectedGame,
@@ -880,6 +983,7 @@ export function useNewGameFlow() {
     startNewGame,
     switchToGuestSession,
     submitOwnerIntroChoice,
+    updateTimeControl,
   };
 }
 

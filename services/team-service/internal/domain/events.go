@@ -25,11 +25,12 @@ type DayAdvancedEvent struct {
 
 type MatchScheduledEvent struct {
 	EventMeta
-	MatchID       string    `json:"match_id"`
-	SimulatedDate string    `json:"simulated_date"`
-	HomeTeam      MatchTeam `json:"home_team"`
-	AwayTeam      MatchTeam `json:"away_team"`
-	Seed          uint64    `json:"seed"`
+	MatchID       string        `json:"match_id"`
+	SimulatedDate string        `json:"simulated_date"`
+	HomeTeam      MatchTeam     `json:"home_team"`
+	AwayTeam      MatchTeam     `json:"away_team"`
+	Players       []MatchPlayer `json:"players"`
+	Seed          uint64        `json:"seed"`
 }
 
 type MatchFinishedEvent struct {
@@ -46,6 +47,55 @@ type MatchFinishedEvent struct {
 	KeyMoments    []KeyMoment      `json:"key_moments"`
 }
 
+type SeasonPatchEvent struct {
+	Type    string           `json:"type"`
+	Subject string           `json:"subject"`
+	GameID  string           `json:"game_id"`
+	Patch   SeasonStatePatch `json:"patch"`
+}
+
+type SeasonStatePatch struct {
+	Wins          uint16              `json:"wins"`
+	Losses        uint16              `json:"losses"`
+	PointsFor     uint16              `json:"points_for"`
+	PointsAgainst uint16              `json:"points_against"`
+	LastResult    *SeasonMatchSummary `json:"last_result,omitempty"`
+}
+
+type SeasonMatchSummary struct {
+	MatchID       string `json:"match_id"`
+	SimulatedDate string `json:"simulated_date"`
+	HomeTeamID    string `json:"home_team_id"`
+	AwayTeamID    string `json:"away_team_id"`
+	HomeScore     uint16 `json:"home_score"`
+	AwayScore     uint16 `json:"away_score"`
+	WinnerTeamID  string `json:"winner_team_id"`
+}
+
+type SeasonRecord struct {
+	GameID        string
+	Wins          uint16
+	Losses        uint16
+	PointsFor     uint16
+	PointsAgainst uint16
+	LastResult    *SeasonMatchSummary
+}
+
+func SeasonPatchFromRecord(record SeasonRecord) SeasonPatchEvent {
+	return SeasonPatchEvent{
+		Type:    SubjectSeasonPatchDelta,
+		Subject: SubjectSeasonPatchDelta,
+		GameID:  record.GameID,
+		Patch: SeasonStatePatch{
+			Wins:          record.Wins,
+			Losses:        record.Losses,
+			PointsFor:     record.PointsFor,
+			PointsAgainst: record.PointsAgainst,
+			LastResult:    record.LastResult,
+		},
+	}
+}
+
 type MatchTeam struct {
 	TeamID             string `json:"team_id"`
 	Name               string `json:"name"`
@@ -55,6 +105,19 @@ type MatchTeam struct {
 	DefenseRating      uint8  `json:"defense_rating"`
 	Pace               uint8  `json:"pace"`
 	HomeCourtAdvantage int8   `json:"home_court_advantage"`
+}
+
+type MatchPlayer struct {
+	PlayerID       string `json:"player_id"`
+	TeamID         string `json:"team_id"`
+	Rating         uint8  `json:"rating"`
+	Scoring        uint8  `json:"scoring"`
+	Rebounding     uint8  `json:"rebounding"`
+	Playmaking     uint8  `json:"playmaking"`
+	Defense        uint8  `json:"defense"`
+	Stamina        uint8  `json:"stamina"`
+	Fatigue        uint8  `json:"fatigue"`
+	EmotionalState int8   `json:"emotional_state"`
 }
 
 type PlayerBoxScore struct {
