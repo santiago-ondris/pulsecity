@@ -98,6 +98,17 @@ type NarrativeResponseEvent struct {
 	Timestamp string            `json:"timestamp"`
 }
 
+type GMDecisionRegisteredEvent struct {
+	EventMeta
+	DecisionID     string            `json:"decision_id"`
+	Kind           string            `json:"kind"`
+	Payload        map[string]string `json:"payload"`
+	SimulatedDate  string            `json:"simulated_date"`
+	AgentsAffected []string          `json:"agents_affected"`
+	SourceEventID  string            `json:"source_event_id,omitempty"`
+	SourceSubject  string            `json:"source_subject,omitempty"`
+}
+
 type MapGenerationProgress struct {
 	GameID   string     `json:"game_id"`
 	Stage    string     `json:"stage"`
@@ -167,6 +178,7 @@ const (
 	SubjectAgentPatchDelta      = "agent.patch"
 	SubjectRosterPatchDelta     = "roster.patch"
 	SubjectRelationsPatchDelta  = "relations.patch"
+	SubjectGMDecisionRegistered = "decision.gm_registrada"
 )
 
 type EventMeta struct {

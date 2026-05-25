@@ -8,12 +8,26 @@ use crate::{
         apply_match_to_relationships, default_agent_relationships, default_core_agent_state,
         default_individual_agent_states, default_player_agent_state,
     },
-    events::MatchFinishedEvent,
+    events::{GMDecisionRegisteredEvent, MatchFinishedEvent},
     simulation::SimulationState,
 };
 
 pub struct Store {
     client: Client,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GMDecisionLogEntry {
+    pub event_id: String,
+    pub game_id: String,
+    pub decision_id: String,
+    pub kind: String,
+    pub payload: std::collections::BTreeMap<String, String>,
+    pub simulated_date: String,
+    pub agents_affected: Vec<String>,
+    pub source_event_id: Option<String>,
+    pub source_subject: Option<String>,
+    pub occurred_at: String,
 }
 
 impl Store {
@@ -118,6 +132,25 @@ CREATE TABLE IF NOT EXISTS agent_relationship_event_hashes (
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (game_id, relationship_key, source_event_id)
 );
+
+CREATE TABLE IF NOT EXISTS gm_decisions_log (
+    event_id TEXT PRIMARY KEY,
+    game_id TEXT NOT NULL,
+    decision_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    simulated_date TEXT NOT NULL,
+    agents_affected_json TEXT NOT NULL,
+    source_event_id TEXT,
+    source_subject TEXT,
+    occurred_at TEXT NOT NULL,
+    schema_version SMALLINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (game_id, decision_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gm_decisions_log_game_created
+ON gm_decisions_log (game_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS agent_processed_matches (
     game_id TEXT NOT NULL,
@@ -309,6 +342,108 @@ WHERE game_id = $1;
             .with_context(|| "count agent relationships")?;
 
         Ok(row.get(0))
+    }
+
+    pub async fn record_gm_decision(&self, event: &GMDecisionRegisteredEvent) -> Result<bool> {
+        let payload_json = serde_json::to_string(&event.payload)
+            .with_context(|| "encode gm decision payload json")?;
+        let agents_affected_json = serde_json::to_string(&event.agents_affected)
+            .with_context(|| "encode gm decision agents affected json")?;
+        let schema_version = i16::try_from(event.meta.schema_version).unwrap_or(i16::MAX);
+
+        let inserted = self
+            .client
+            .execute(
+                "
+INSERT INTO gm_decisions_log (
+    event_id,
+    game_id,
+    decision_id,
+    kind,
+    payload_json,
+    simulated_date,
+    agents_affected_json,
+    source_event_id,
+    source_subject,
+    occurred_at,
+    schema_version,
+    created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+ON CONFLICT DO NOTHING;
+",
+                &[
+                    &event.meta.event_id,
+                    &event.meta.game_id,
+                    &event.decision_id,
+                    &event.kind,
+                    &payload_json,
+                    &event.simulated_date,
+                    &agents_affected_json,
+                    &event.source_event_id,
+                    &event.source_subject,
+                    &event.meta.occurred_at,
+                    &schema_version,
+                ],
+            )
+            .await
+            .with_context(|| "record gm decision")?;
+
+        Ok(inserted > 0)
+    }
+
+    pub async fn latest_gm_decisions(
+        &self,
+        game_id: &str,
+        limit: i64,
+    ) -> Result<Vec<GMDecisionLogEntry>> {
+        let bounded_limit = limit.clamp(1, 50);
+        let rows = self
+            .client
+            .query(
+                "
+SELECT
+    event_id,
+    game_id,
+    decision_id,
+    kind,
+    payload_json,
+    simulated_date,
+    agents_affected_json,
+    source_event_id,
+    source_subject,
+    occurred_at
+FROM gm_decisions_log
+WHERE game_id = $1
+ORDER BY created_at DESC
+LIMIT $2;
+",
+                &[&game_id, &bounded_limit],
+            )
+            .await
+            .with_context(|| "load latest gm decisions")?;
+
+        let mut decisions = Vec::with_capacity(rows.len());
+        for row in rows {
+            let payload_json: String = row.get("payload_json");
+            let agents_affected_json: String = row.get("agents_affected_json");
+            decisions.push(GMDecisionLogEntry {
+                event_id: row.get("event_id"),
+                game_id: row.get("game_id"),
+                decision_id: row.get("decision_id"),
+                kind: row.get("kind"),
+                payload: serde_json::from_str(&payload_json)
+                    .with_context(|| "decode gm decision payload json")?,
+                simulated_date: row.get("simulated_date"),
+                agents_affected: serde_json::from_str(&agents_affected_json)
+                    .with_context(|| "decode gm decision agents affected json")?,
+                source_event_id: row.get("source_event_id"),
+                source_subject: row.get("source_subject"),
+                occurred_at: row.get("occurred_at"),
+            });
+        }
+
+        Ok(decisions)
     }
 
     async fn load_team_roster_players(&self, game_id: &str) -> Result<Vec<TeamRosterPlayer>> {

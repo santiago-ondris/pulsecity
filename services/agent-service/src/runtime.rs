@@ -11,8 +11,9 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     events::{
-        DayAdvancedEvent, EventMeta, MapGenerationStartedEvent, MatchFinishedEvent,
-        PauseChangedEvent, SUBJECT_AGENT_RELATIONSHIP_CHANGED, SUBJECT_AGENT_STATE_CHANGED,
+        DayAdvancedEvent, EventMeta, GMDecisionRegisteredEvent, MapGenerationStartedEvent,
+        MatchFinishedEvent, PauseChangedEvent, SUBJECT_AGENT_RELATIONSHIP_CHANGED,
+        SUBJECT_AGENT_STATE_CHANGED, SUBJECT_GM_DECISION_REGISTERED,
         SUBJECT_MAP_GENERATION_STARTED, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
         SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED,
         SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent,
@@ -64,6 +65,10 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
         .subscribe(SUBJECT_MAP_GENERATION_STARTED)
         .await
         .context("subscribe mapa.generacion_iniciada")?;
+    let mut gm_decision_registered = client
+        .subscribe(SUBJECT_GM_DECISION_REGISTERED)
+        .await
+        .context("subscribe decision.gm_registrada")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -150,6 +155,14 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
 
                 process_map_generation_started(&store, &event).await?;
             }
+            Some(message) = gm_decision_registered.next() => {
+                let event = match decode_event::<GMDecisionRegisteredEvent>(SUBJECT_GM_DECISION_REGISTERED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                process_gm_decision_registered(&store, &event).await?;
+            }
         }
     }
 
@@ -185,6 +198,10 @@ pub async fn run_for_game(
         .subscribe(SUBJECT_MAP_GENERATION_STARTED)
         .await
         .context("subscribe mapa.generacion_iniciada")?;
+    let mut gm_decision_registered = client
+        .subscribe(SUBJECT_GM_DECISION_REGISTERED)
+        .await
+        .context("subscribe decision.gm_registrada")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -286,6 +303,17 @@ pub async fn run_for_game(
 
                 process_map_generation_started(&store, &event).await?;
             }
+            Some(message) = gm_decision_registered.next() => {
+                let event = match decode_event::<GMDecisionRegisteredEvent>(SUBJECT_GM_DECISION_REGISTERED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+                if event.meta.game_id != state.game_id {
+                    continue;
+                }
+
+                process_gm_decision_registered(&store, &event).await?;
+            }
         }
     }
 
@@ -354,6 +382,33 @@ async fn process_map_generation_started(
         total_relationships,
         "individual agents ready"
     );
+
+    Ok(())
+}
+
+async fn process_gm_decision_registered(
+    store: &Store,
+    event: &GMDecisionRegisteredEvent,
+) -> Result<()> {
+    let inserted = store
+        .record_gm_decision(event)
+        .await
+        .with_context(|| format!("record gm decision game={}", event.meta.game_id))?;
+
+    if inserted {
+        info!(
+            game_id = %event.meta.game_id,
+            decision_id = %event.decision_id,
+            kind = %event.kind,
+            "gm decision recorded"
+        );
+    } else {
+        debug!(
+            game_id = %event.meta.game_id,
+            decision_id = %event.decision_id,
+            "gm decision already recorded"
+        );
+    }
 
     Ok(())
 }

@@ -540,6 +540,34 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	decisionEvent := domain.GMDecisionRegisteredEvent{
+		EventMeta: domain.EventMeta{
+			EventID:       "decision-owner-intro-" + gameID,
+			GameID:        gameID,
+			OccurredAt:    responseEvent.Timestamp,
+			SchemaVersion: 1,
+		},
+		DecisionID:    "owner-intro-" + gameID,
+		Kind:          "owner_intro_response",
+		SimulatedDate: "2026-10-01",
+		Payload: map[string]string{
+			"choice_id":            choice.ID,
+			"choice_label":         choice.Label,
+			"city_name":            game.CityName,
+			"franchise_name":       game.FranchiseName,
+			"initial_scenario":     game.InitialScenario,
+			"city_management_mode": game.CityManagementMode,
+		},
+		AgentsAffected: []string{"owner", "president_basketball_ops", "ceo_business_ops"},
+		SourceEventID:  game.OwnerIntroEvent.EventID,
+		SourceSubject:  "narrativa.respuesta_gm",
+	}
+	if err := d.Bus.PublishJSON(domain.SubjectGMDecisionRegistered, decisionEvent); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "failed to publish gm decision",
+		})
+		return
+	}
 
 	writeJSON(w, http.StatusAccepted, choice)
 }

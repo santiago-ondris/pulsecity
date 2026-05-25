@@ -13,6 +13,7 @@ pub const SUBJECT_AGENT_STATE_CHANGED: &str = "agente.estado_cambio";
 pub const SUBJECT_AGENT_RELATIONSHIP_CHANGED: &str = "agente.relacion_cambio";
 pub const SUBJECT_AGENT_CRITICAL_EVENT: &str = "agente.evento_critico";
 pub const SUBJECT_ROSTER_PATCH: &str = "roster.patch";
+pub const SUBJECT_GM_DECISION_REGISTERED: &str = "decision.gm_registrada";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventMeta {
@@ -173,6 +174,21 @@ pub struct AgentCriticalEvent {
     pub source_subject: String,
     pub title: String,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GMDecisionRegisteredEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub decision_id: String,
+    pub kind: String,
+    pub payload: BTreeMap<String, String>,
+    pub simulated_date: String,
+    pub agents_affected: Vec<String>,
+    #[serde(default)]
+    pub source_event_id: Option<String>,
+    #[serde(default)]
+    pub source_subject: Option<String>,
 }
 
 #[cfg(test)]
