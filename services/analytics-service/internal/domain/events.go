@@ -53,6 +53,11 @@ type CityEconomyChangeEvent struct {
 	FanSentimentDelta float64 `json:"fan_sentiment_delta"`
 	TicketSalesDelta  float64 `json:"ticket_sales_delta"`
 	LocalEconomyDelta float64 `json:"local_economy_delta"`
+	FanSentiment      float64 `json:"fan_sentiment"`
+	TicketSalesIndex  float64 `json:"ticket_sales_index"`
+	LocalEconomyIndex float64 `json:"local_economy_index"`
+	WinStreak         uint16  `json:"win_streak"`
+	LossStreak        uint16  `json:"loss_streak"`
 	Reason            string  `json:"reason"`
 }
 

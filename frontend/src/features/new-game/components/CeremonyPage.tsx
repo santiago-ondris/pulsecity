@@ -2,10 +2,13 @@ import type { CSSProperties } from "react";
 
 import skylineBackdrop from "../../assets/landing-city-night.svg";
 import type {
+  AgentClientStates,
   CityClientState,
   MapClientState,
+  NarrativeEvent,
   RealtimeEvent,
   SeasonClientState,
+  SeasonMatchSummary,
   TimeClientState,
 } from "../../../types";
 import { stageMeta, stageSequence } from "../constants";
@@ -25,9 +28,12 @@ interface CeremonyPageProps {
   };
   events: RealtimeEvent[];
   gameId: string;
+  agentStates: AgentClientStates;
   cityState: CityClientState;
   mapState: MapClientState;
+  narrativeInbox: NarrativeEvent[];
   ownerIntroResponseLabel: string | null;
+  recentResults: SeasonMatchSummary[];
   seasonState: SeasonClientState;
   socketStatus: string;
   status: string;
@@ -147,13 +153,16 @@ export function CeremonyPage(props: CeremonyPageProps) {
           </section>
 
           <section className="ceremony-panel">
-            <p className="eyebrow">Estado</p>
+            <div className="ceremony-panel__title">
+              <p className="eyebrow">Temporada viva</p>
+              <strong>{props.seasonState.wins + props.seasonState.losses}/82</strong>
+            </div>
+            <div className="ceremony-scoreline">
+              <strong>{props.seasonState.wins}-{props.seasonState.losses}</strong>
+              <span>{formatPointDifferential(props.seasonState)}</span>
+            </div>
             <div className="ceremony-state-grid">
               <StateItem label="Partida" value={formatGameId(props.mapState.game_id || props.gameId)} />
-              <StateItem
-                label="Record"
-                value={`${props.seasonState.wins}-${props.seasonState.losses}`}
-              />
               <StateItem
                 label="Ciudad"
                 value={`${Math.round(props.cityState.fan_sentiment)} ánimo / ${Math.round(props.cityState.stadium_district_land_value)} suelo`}
@@ -167,6 +176,80 @@ export function CeremonyPage(props: CeremonyPageProps) {
                 label="Owner"
                 value={props.ownerIntroResponseLabel ?? "Pendiente de llamada"}
               />
+            </div>
+          </section>
+
+          <section className="ceremony-panel">
+            <div className="ceremony-panel__title">
+              <p className="eyebrow">Resultados recientes</p>
+              <strong>{props.recentResults.length}</strong>
+            </div>
+            <ul className="ceremony-results">
+              {props.recentResults.length === 0 ? (
+                <li className="empty">Todavia no hay partidos finalizados.</li>
+              ) : (
+                props.recentResults.map((result) => (
+                  <li key={result.match_id}>
+                    <span className={result.winner_team_id === "pulsecity" ? "win" : "loss"}>
+                      {result.winner_team_id === "pulsecity" ? "W" : "L"}
+                    </span>
+                    <div>
+                      <strong>{formatMatchScore(result)}</strong>
+                      <small>{formatSimulatedDate(result.simulated_date)}</small>
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+
+          <section className="ceremony-panel">
+            <div className="ceremony-panel__title">
+              <p className="eyebrow">Inbox narrativo</p>
+              <strong>{props.narrativeInbox.length}</strong>
+            </div>
+            <ul className="ceremony-inbox">
+              {props.narrativeInbox.length === 0 ? (
+                <li className="empty">Los reportes post-partido van a aparecer aca.</li>
+              ) : (
+                props.narrativeInbox.map((event) => (
+                  <li key={event.event_id}>
+                    <div>
+                      <strong>{event.title}</strong>
+                      <span>{event.emitter}</span>
+                    </div>
+                    <p>{event.body}</p>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+
+          <section className="ceremony-panel">
+            <p className="eyebrow">Agentes core</p>
+            <div className="ceremony-agents">
+              {coreAgentOrder.map((agent) => {
+                const state = props.agentStates[agent.id];
+                return (
+                  <article key={agent.id} className="ceremony-agent">
+                    <div className="ceremony-agent__header">
+                      <strong>{agent.label}</strong>
+                      <span className={`ceremony-agent__mood mood-${state?.mood ?? "idle"}`}>
+                        {state?.mood ?? "idle"}
+                      </span>
+                    </div>
+                    <p>{state?.summary || "Esperando el primer resultado."}</p>
+                    <div className="ceremony-agent__metrics">
+                      {agent.metrics.map((metric) => (
+                        <span key={metric.key}>
+                          {metric.label}
+                          <strong>{formatAgentMetric(state?.state[metric.key])}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
 
@@ -220,6 +303,49 @@ export function CeremonyPage(props: CeremonyPageProps) {
   );
 }
 
+const coreAgentOrder = [
+  {
+    id: "owner",
+    label: "Owner",
+    metrics: [
+      { key: "sporting_trust", label: "Dep." },
+      { key: "patience_remaining", label: "Pac." },
+    ],
+  },
+  {
+    id: "head_coach",
+    label: "Head Coach",
+    metrics: [
+      { key: "roster_satisfaction", label: "Roster" },
+      { key: "results_pressure", label: "Pres." },
+    ],
+  },
+  {
+    id: "cfo",
+    label: "CFO",
+    metrics: [
+      { key: "financial_trust", label: "Fin." },
+      { key: "budget_alert", label: "Alerta" },
+    ],
+  },
+  {
+    id: "scouting_director",
+    label: "Dir. Scouting",
+    metrics: [
+      { key: "criteria_trust", label: "Crit." },
+      { key: "motivation", label: "Mot." },
+    ],
+  },
+  {
+    id: "sports_psychologist",
+    label: "Sports Psych.",
+    metrics: [
+      { key: "locker_room_climate", label: "Clima" },
+      { key: "emotional_alert", label: "Alerta" },
+    ],
+  },
+] as const;
+
 function formatSimulatedDate(value: string) {
   const date = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) {
@@ -241,6 +367,34 @@ function StateItem({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatPointDifferential(season: SeasonClientState) {
+  const games = season.wins + season.losses;
+  if (games === 0) {
+    return "DIF 0.0";
+  }
+
+  const differential = (season.points_for - season.points_against) / games;
+  const sign = differential > 0 ? "+" : "";
+  return `DIF ${sign}${differential.toFixed(1)}`;
+}
+
+function formatMatchScore(result: SeasonMatchSummary) {
+  const ownHome = result.home_team_id === "pulsecity";
+  const ownScore = ownHome ? result.home_score : result.away_score;
+  const opponentScore = ownHome ? result.away_score : result.home_score;
+  const venue = ownHome ? "vs" : "@";
+  const opponent = ownHome ? result.away_team_id : result.home_team_id;
+  return `${ownScore}-${opponentScore} ${venue} ${opponent}`;
+}
+
+function formatAgentMetric(value: number | undefined) {
+  if (value === undefined) {
+    return "--";
+  }
+
+  return value.toFixed(2);
 }
 
 function TerrainStat({ label, value }: { label: string; value: number }) {

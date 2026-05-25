@@ -151,6 +151,28 @@ func NextScheduledMatch(schedule []ScheduledMatch, simulatedDate string) (Schedu
 	return ScheduledMatch{}, false
 }
 
+func CoveredDayAdvancedEvents(event DayAdvancedEvent) ([]DayAdvancedEvent, error) {
+	if event.DaysProcessed == 0 {
+		return nil, nil
+	}
+
+	finalDate, err := time.Parse(time.DateOnly, event.SimulatedDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse simulated date %q: %w", event.SimulatedDate, err)
+	}
+
+	covered := make([]DayAdvancedEvent, 0, event.DaysProcessed)
+	startDate := finalDate.AddDate(0, 0, -int(event.DaysProcessed-1))
+	for index := 0; index < int(event.DaysProcessed); index++ {
+		day := event
+		day.SimulatedDate = startDate.AddDate(0, 0, index).Format(time.DateOnly)
+		day.DaysProcessed = 1
+		covered = append(covered, day)
+	}
+
+	return covered, nil
+}
+
 func ownTeam(event GameStartedEvent) MatchTeam {
 	name := strings.TrimSpace(event.FranchiseName)
 	if name == "" {

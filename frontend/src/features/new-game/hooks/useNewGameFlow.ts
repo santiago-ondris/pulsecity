@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
+  AgentClientStates,
   CityClientState,
   GameSetup,
   GameSummary,
@@ -11,6 +12,7 @@ import type {
   NarrativeEvent,
   RealtimeEvent,
   SeasonClientState,
+  SeasonMatchSummary,
   TimeClientState,
   UserSession,
 } from "../../../types";
@@ -61,6 +63,8 @@ const initialCityState: CityClientState = {
   loss_streak: 0,
 };
 
+const initialAgentStates: AgentClientStates = {};
+
 export function useNewGameFlow() {
   const [draft, setDraft] = useState<NewGameDraft>(initialDraft);
   const [currentPage, setCurrentPage] = useState<FlowPage>("session");
@@ -75,8 +79,11 @@ export function useNewGameFlow() {
   const [mapState, setMapState] = useState<MapClientState>(initialMapState);
   const [timeState, setTimeState] = useState<TimeClientState>(initialTimeState);
   const [seasonState, setSeasonState] = useState<SeasonClientState>(initialSeasonState);
+  const [recentResults, setRecentResults] = useState<SeasonMatchSummary[]>([]);
   const [cityState, setCityState] = useState<CityClientState>(initialCityState);
+  const [agentStates, setAgentStates] = useState<AgentClientStates>(initialAgentStates);
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
+  const [narrativeInbox, setNarrativeInbox] = useState<NarrativeEvent[]>([]);
   const [activeNarrativeEvent, setActiveNarrativeEvent] = useState<NarrativeEvent | null>(null);
   const [ownerIntroResponse, setOwnerIntroResponse] = useState<NarrativeChoice | null>(null);
   const [submittingNarrativeChoice, setSubmittingNarrativeChoice] = useState(false);
@@ -166,6 +173,11 @@ export function useNewGameFlow() {
     }
 
     if (payload.type === "narrative.event") {
+      if (payload.kind !== "owner_intro") {
+        setNarrativeInbox((current) => prependNarrativeEvent(current, payload));
+        setStatus(`${payload.emitter}: ${payload.title}`);
+        return;
+      }
       if (ownerIntroResponse) {
         return;
       }
@@ -204,6 +216,9 @@ export function useNewGameFlow() {
         points_against: payload.patch.points_against ?? current.points_against,
         last_result: payload.patch.last_result ?? current.last_result,
       }));
+      if (payload.patch.last_result) {
+        setRecentResults((current) => prependMatchResult(current, payload.patch.last_result!));
+      }
       return;
     }
 
@@ -219,6 +234,28 @@ export function useNewGameFlow() {
         last_match_id: payload.patch.last_match_id ?? current.last_match_id,
         reason: payload.patch.reason ?? current.reason,
       }));
+      return;
+    }
+
+    if (payload.type === "agent.patch") {
+      setAgentStates((current) => {
+        const previous = current[payload.agent_id];
+        return {
+          ...current,
+          [payload.agent_id]: {
+            agent_id: payload.agent_id,
+            mood: payload.patch.mood ?? previous?.mood ?? "calm",
+            state: {
+              ...(previous?.state ?? {}),
+              ...(payload.patch.state ?? {}),
+            },
+            summary: payload.patch.summary ?? previous?.summary ?? "",
+            simulated_date: payload.patch.simulated_date ?? previous?.simulated_date,
+            source_event_id: payload.patch.source_event_id ?? previous?.source_event_id,
+            source_subject: payload.patch.source_subject ?? previous?.source_subject,
+          },
+        };
+      });
       return;
     }
 
@@ -530,8 +567,13 @@ export function useNewGameFlow() {
     setCreatingGame(true);
     setStatus(`Fundando ${draft.cityName} ${draft.franchiseName}...`);
     setEvents([]);
+    setRecentResults([]);
+    setNarrativeInbox([]);
     setMapState(initialMapState);
+    setTimeState(initialTimeState);
+    setSeasonState(initialSeasonState);
     setCityState(initialCityState);
+    setAgentStates(initialAgentStates);
     setOwnerIntroResponse(null);
     setActiveNarrativeEvent(null);
 
@@ -930,8 +972,11 @@ export function useNewGameFlow() {
     setMapState(initialMapState);
     setTimeState(initialTimeState);
     setSeasonState(initialSeasonState);
+    setRecentResults([]);
     setCityState(initialCityState);
+    setAgentStates(initialAgentStates);
     setEvents([]);
+    setNarrativeInbox([]);
     setActiveNarrativeEvent(null);
     setOwnerIntroResponse(null);
     setSocketStatus("Socket inactivo");
@@ -949,13 +994,16 @@ export function useNewGameFlow() {
     currentPage,
     currentStage,
     cityState,
+    agentStates,
     draft,
     events,
     gameId,
     games,
     guestToken,
     mapState,
+    narrativeInbox,
     ownerIntroResponse,
+    recentResults,
     restoringSession,
     selectedGame,
     selectedGameId,
@@ -989,6 +1037,14 @@ export function useNewGameFlow() {
 
 function clearGuestSessionStorage() {
   window.localStorage.removeItem(guestTokenStorageKey);
+}
+
+function prependMatchResult(current: SeasonMatchSummary[], next: SeasonMatchSummary) {
+  return [next, ...current.filter((result) => result.match_id !== next.match_id)].slice(0, 8);
+}
+
+function prependNarrativeEvent(current: NarrativeEvent[], next: NarrativeEvent) {
+  return [next, ...current.filter((event) => event.event_id !== next.event_id)].slice(0, 8);
 }
 
 function buildAuthHeaders({

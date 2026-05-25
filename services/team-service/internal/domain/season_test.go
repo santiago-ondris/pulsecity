@@ -80,6 +80,46 @@ func TestNextScheduledMatch(t *testing.T) {
 	}
 }
 
+func TestCoveredDayAdvancedEventsExpandsSkippedDates(t *testing.T) {
+	days, err := CoveredDayAdvancedEvents(DayAdvancedEvent{
+		EventMeta:     EventMeta{GameID: "game-1"},
+		SimulatedDate: "2026-10-24",
+		Speed:         20,
+		DaysProcessed: 3,
+	})
+	if err != nil {
+		t.Fatalf("CoveredDayAdvancedEvents() error = %v, want nil", err)
+	}
+
+	if len(days) != 3 {
+		t.Fatalf("CoveredDayAdvancedEvents() len = %d, want 3", len(days))
+	}
+	if days[0].SimulatedDate != "2026-10-22" {
+		t.Fatalf("first covered date = %q, want 2026-10-22", days[0].SimulatedDate)
+	}
+	if days[1].SimulatedDate != "2026-10-23" {
+		t.Fatalf("second covered date = %q, want 2026-10-23", days[1].SimulatedDate)
+	}
+	if days[2].SimulatedDate != "2026-10-24" {
+		t.Fatalf("third covered date = %q, want 2026-10-24", days[2].SimulatedDate)
+	}
+	for _, day := range days {
+		if day.DaysProcessed != 1 {
+			t.Fatalf("covered day DaysProcessed = %d, want 1", day.DaysProcessed)
+		}
+	}
+}
+
+func TestCoveredDayAdvancedEventsRejectsInvalidDate(t *testing.T) {
+	_, err := CoveredDayAdvancedEvents(DayAdvancedEvent{
+		SimulatedDate: "invalid",
+		DaysProcessed: 1,
+	})
+	if err == nil {
+		t.Fatal("CoveredDayAdvancedEvents() error = nil, want error")
+	}
+}
+
 func TestBuildMatchScheduledEventIncludesFullInput(t *testing.T) {
 	season, err := GenerateInitialSeason(GameStartedEvent{
 		GameID:        "game-1",

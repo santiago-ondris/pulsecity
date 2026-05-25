@@ -102,9 +102,12 @@ export function NewGameFlow() {
           currentStage={flow.currentStage}
           events={flow.events}
           gameId={flow.gameId}
+          agentStates={flow.agentStates}
           cityState={flow.cityState}
           mapState={flow.mapState}
+          narrativeInbox={flow.narrativeInbox}
           ownerIntroResponseLabel={flow.ownerIntroResponse?.label ?? null}
+          recentResults={flow.recentResults}
           seasonState={flow.seasonState}
           socketStatus={flow.socketStatus}
           status={flow.status}

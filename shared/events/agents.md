@@ -64,3 +64,37 @@ Notas:
 - `state` permite variables distintas por agente sin abrir todavia una matriz de relaciones.
 - los valores numericos se mantienen en rango `-1.0` a `1.0`, salvo variables que el dominio documente distinto.
 - el `gateway` traduce `agente.estado_cambio` a `agent.patch`.
+
+## Variables iniciales M2.11
+
+`owner`:
+
+- `sporting_trust`
+- `business_trust`
+- `patience_remaining`
+- `satisfaction`
+
+`head_coach`:
+
+- `gm_trust`
+- `roster_satisfaction`
+- `results_pressure`
+- `locker_room_relationship`
+
+`cfo`:
+
+- `financial_trust`
+- `budget_alert`
+- `financial_conservatism`
+
+`scouting_director`:
+
+- `criteria_trust`
+- `motivation`
+- `perceived_precision`
+
+`sports_psychologist`:
+
+- `locker_room_climate`
+- `emotional_alert`
+- `player_trust`

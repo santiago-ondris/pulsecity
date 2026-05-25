@@ -159,8 +159,11 @@ const (
 	SubjectTimeSpeedChanged   = "tiempo.velocidad_cambiada"
 	SubjectTimePauseChanged   = "tiempo.pausa_activada"
 	SubjectTimeDayAdvanced    = "tiempo.dia_avanzado"
+	SubjectMatchFinished      = "partido.terminado"
 	SubjectSeasonPatchDelta   = "season.patch"
 	SubjectCityPatchDelta     = "city.patch"
+	SubjectAgentStateChanged  = "agente.estado_cambio"
+	SubjectAgentPatchDelta    = "agent.patch"
 )
 
 type EventMeta struct {
@@ -259,4 +262,49 @@ type CityStatePatch struct {
 	LossStreak               uint16  `json:"loss_streak"`
 	LastMatchID              string  `json:"last_match_id"`
 	Reason                   string  `json:"reason"`
+}
+
+type AgentStateChangedEvent struct {
+	EventMeta
+	SimulatedDate string             `json:"simulated_date"`
+	AgentID       string             `json:"agent_id"`
+	SourceEventID string             `json:"source_event_id"`
+	SourceSubject string             `json:"source_subject"`
+	Mood          string             `json:"mood"`
+	State         map[string]float64 `json:"state"`
+	Summary       string             `json:"summary"`
+}
+
+type AgentPatchEnvelope struct {
+	Type    string          `json:"type"`
+	Subject string          `json:"subject"`
+	GameID  string          `json:"game_id"`
+	AgentID string          `json:"agent_id"`
+	Patch   AgentStatePatch `json:"patch"`
+}
+
+type AgentStatePatch struct {
+	Mood          string             `json:"mood"`
+	State         map[string]float64 `json:"state"`
+	Summary       string             `json:"summary"`
+	SimulatedDate string             `json:"simulated_date"`
+	SourceEventID string             `json:"source_event_id"`
+	SourceSubject string             `json:"source_subject"`
+}
+
+func AgentPatchFromStateChanged(event AgentStateChangedEvent) AgentPatchEnvelope {
+	return AgentPatchEnvelope{
+		Type:    SubjectAgentPatchDelta,
+		Subject: SubjectAgentPatchDelta,
+		GameID:  event.GameID,
+		AgentID: event.AgentID,
+		Patch: AgentStatePatch{
+			Mood:          event.Mood,
+			State:         event.State,
+			Summary:       event.Summary,
+			SimulatedDate: event.SimulatedDate,
+			SourceEventID: event.SourceEventID,
+			SourceSubject: event.SourceSubject,
+		},
+	}
 }

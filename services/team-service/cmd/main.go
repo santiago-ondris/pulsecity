@@ -73,21 +73,28 @@ func run() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		scheduled, found, err := store.DispatchScheduledMatchForDate(ctx, event)
+		days, err := domain.CoveredDayAdvancedEvents(event)
 		if err != nil {
-			log.Printf("dispatch scheduled match game=%s date=%s: %v", event.GameID, event.SimulatedDate, err)
+			log.Printf("expand advanced days game=%s date=%s: %v", event.GameID, event.SimulatedDate, err)
 			return
 		}
-		if !found {
-			return
-		}
+		for _, day := range days {
+			scheduled, found, err := store.DispatchScheduledMatchForDate(ctx, day)
+			if err != nil {
+				log.Printf("dispatch scheduled match game=%s date=%s: %v", day.GameID, day.SimulatedDate, err)
+				return
+			}
+			if !found {
+				continue
+			}
 
-		if err := bus.PublishJSON(domain.SubjectMatchScheduled, scheduled); err != nil {
-			log.Printf("publish scheduled match game=%s match=%s: %v", scheduled.GameID, scheduled.MatchID, err)
-			return
-		}
+			if err := bus.PublishJSON(domain.SubjectMatchScheduled, scheduled); err != nil {
+				log.Printf("publish scheduled match game=%s match=%s: %v", scheduled.GameID, scheduled.MatchID, err)
+				return
+			}
 
-		log.Printf("match scheduled game=%s match=%s date=%s", scheduled.GameID, scheduled.MatchID, scheduled.SimulatedDate)
+			log.Printf("match scheduled game=%s match=%s date=%s", scheduled.GameID, scheduled.MatchID, scheduled.SimulatedDate)
+		}
 	}); err != nil {
 		return err
 	}

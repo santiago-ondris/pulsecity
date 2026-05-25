@@ -98,6 +98,10 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return event.patch.reason ?? "Pulso urbano actualizado";
   }
 
+  if (event.type === "agent.patch") {
+    return event.patch.summary ?? `${event.agent_id} actualizo su estado`;
+  }
+
   return event.patch.message ?? "Patch recibido";
 }
 

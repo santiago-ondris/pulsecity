@@ -27,7 +27,15 @@ Publicado por `narrative-service`.
   "metadata": {
     "match_id": "uuid",
     "source_event_id": "uuid",
-    "simulated_date": "2026-10-22"
+    "source_subject": "partido.terminado",
+    "simulated_date": "2026-10-22",
+    "home_team_id": "pulsecity",
+    "away_team_id": "rival-generated-id",
+    "home_score": "112",
+    "away_score": "106",
+    "winner_team_id": "pulsecity",
+    "margin": "6",
+    "win_streak": "3"
   },
   "choices": [
     {
@@ -58,4 +66,5 @@ Notas:
 
 - en M2 la narrativa es templateada/rule-based.
 - para post-partido, `narrative-service` escucha `partido.terminado`, espera 250-500ms y genera `narrativa.evento_generado`.
+- despues del delay puede leer contexto actualizado de la partida para incluir racha si esta disponible.
 - el `gateway` reenvia este evento al frontend como `narrative.event`.

@@ -168,6 +168,18 @@ func main() {
 		log.Fatalf("subscribe city patch events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectAgentStateChanged, func(_ string, data []byte) {
+		var event domain.AgentStateChangedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode agent state changed: %v", err)
+			return
+		}
+
+		hub.Broadcast(domain.AgentPatchFromStateChanged(event))
+	}); err != nil {
+		log.Fatalf("subscribe agent state events: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
 		Bus:       bus,

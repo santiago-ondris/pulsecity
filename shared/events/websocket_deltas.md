@@ -81,10 +81,15 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
   "agent_id": "head_coach",
   "patch": {
     "mood": "calm",
-    "trust": 0.16,
-    "satisfaction": 0.08,
-    "pressure": 0.22,
-    "summary": "El coach gana confianza tras una victoria cerrada."
+    "state": {
+      "gm_trust": 0.16,
+      "roster_satisfaction": 0.08,
+      "results_pressure": 0.22
+    },
+    "summary": "El coach gana confianza tras una victoria cerrada.",
+    "simulated_date": "2026-10-22",
+    "source_event_id": "uuid",
+    "source_subject": "partido.terminado"
   }
 }
 ```

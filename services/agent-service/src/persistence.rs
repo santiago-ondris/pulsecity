@@ -1,7 +1,11 @@
 use anyhow::{Context, Result};
 use tokio_postgres::{Client, NoTls};
 
-use crate::simulation::SimulationState;
+use crate::{
+    agents::{AgentStateChange, CoreAgentState, apply_match_finished, default_core_agent_state},
+    events::MatchFinishedEvent,
+    simulation::SimulationState,
+};
 
 pub struct Store {
     client: Client,
@@ -35,6 +39,25 @@ CREATE TABLE IF NOT EXISTS agent_simulation_state (
     last_tick_processed_at TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS agent_core_states (
+    game_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    mood TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    last_match_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_processed_matches (
+    game_id TEXT NOT NULL,
+    match_id TEXT NOT NULL,
+    source_event_id TEXT NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, match_id)
 );
 ",
             )
@@ -130,4 +153,127 @@ ON CONFLICT (game_id) DO UPDATE SET
         self.save_simulation_state(&state).await?;
         Ok(state)
     }
+
+    pub async fn apply_match_finished(
+        &mut self,
+        event: &MatchFinishedEvent,
+        occurred_at: String,
+    ) -> Result<Option<Vec<AgentStateChange>>> {
+        let transaction = self
+            .client
+            .transaction()
+            .await
+            .with_context(|| "begin agent match reaction")?;
+
+        let processed = transaction
+            .execute(
+                "
+INSERT INTO agent_processed_matches (game_id, match_id, source_event_id, processed_at)
+VALUES ($1, $2, $3, NOW())
+ON CONFLICT (game_id, match_id) DO NOTHING;
+",
+                &[&event.meta.game_id, &event.match_id, &event.meta.event_id],
+            )
+            .await
+            .with_context(|| "mark agent match processed")?;
+
+        if processed == 0 {
+            transaction
+                .rollback()
+                .await
+                .with_context(|| "rollback already processed agent match")?;
+            return Ok(None);
+        }
+
+        let mut current_states = Vec::with_capacity(crate::agents::CORE_AGENT_IDS.len());
+        for agent_id in crate::agents::CORE_AGENT_IDS {
+            current_states
+                .push(load_core_agent_state(&transaction, &event.meta.game_id, agent_id).await?);
+        }
+
+        let changes = apply_match_finished(current_states, event, occurred_at);
+        for change in &changes {
+            save_core_agent_state(&transaction, &change.state).await?;
+        }
+
+        transaction
+            .commit()
+            .await
+            .with_context(|| "commit agent match reaction")?;
+
+        Ok(Some(changes))
+    }
+}
+
+async fn load_core_agent_state(
+    transaction: &tokio_postgres::Transaction<'_>,
+    game_id: &str,
+    agent_id: &str,
+) -> Result<CoreAgentState> {
+    let row = transaction
+        .query_opt(
+            "
+SELECT game_id, agent_id, mood, state_json, last_match_id
+FROM agent_core_states
+WHERE game_id = $1 AND agent_id = $2;
+",
+            &[&game_id, &agent_id],
+        )
+        .await
+        .with_context(|| "load core agent state")?;
+
+    let Some(row) = row else {
+        return Ok(default_core_agent_state(game_id, agent_id));
+    };
+
+    let state_json: String = row.get("state_json");
+    let state =
+        serde_json::from_str(&state_json).with_context(|| "decode core agent state json")?;
+
+    Ok(CoreAgentState {
+        game_id: row.get("game_id"),
+        agent_id: row.get("agent_id"),
+        mood: row.get("mood"),
+        state,
+        last_match_id: row.get("last_match_id"),
+    })
+}
+
+async fn save_core_agent_state(
+    transaction: &tokio_postgres::Transaction<'_>,
+    state: &CoreAgentState,
+) -> Result<()> {
+    let state_json =
+        serde_json::to_string(&state.state).with_context(|| "encode core agent state json")?;
+    transaction
+        .execute(
+            "
+INSERT INTO agent_core_states (
+    game_id,
+    agent_id,
+    mood,
+    state_json,
+    last_match_id,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+ON CONFLICT (game_id, agent_id) DO UPDATE SET
+    mood = EXCLUDED.mood,
+    state_json = EXCLUDED.state_json,
+    last_match_id = EXCLUDED.last_match_id,
+    updated_at = NOW();
+",
+            &[
+                &state.game_id,
+                &state.agent_id,
+                &state.mood,
+                &state_json,
+                &state.last_match_id,
+            ],
+        )
+        .await
+        .with_context(|| "save core agent state")?;
+
+    Ok(())
 }

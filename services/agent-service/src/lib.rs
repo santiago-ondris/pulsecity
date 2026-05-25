@@ -1,5 +1,6 @@
 //! Core scaffolding for PulseCity's agent-service.
 
+pub mod agents;
 pub mod events;
 pub mod persistence;
 pub mod runtime;

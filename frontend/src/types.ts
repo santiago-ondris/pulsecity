@@ -130,6 +130,35 @@ export interface CityPatchEnvelope {
   patch: CityStatePatch;
 }
 
+export interface AgentClientState {
+  agent_id: string;
+  mood: string;
+  state: Record<string, number>;
+  summary: string;
+  simulated_date?: string;
+  source_event_id?: string;
+  source_subject?: string;
+}
+
+export type AgentClientStates = Record<string, AgentClientState>;
+
+export interface AgentStatePatch {
+  mood?: string;
+  state?: Record<string, number>;
+  summary?: string;
+  simulated_date?: string;
+  source_event_id?: string;
+  source_subject?: string;
+}
+
+export interface AgentPatchEnvelope {
+  type: "agent.patch";
+  subject: string;
+  game_id: string;
+  agent_id: string;
+  patch: AgentStatePatch;
+}
+
 export interface NarrativeChoice {
   id: string;
   label: string;
@@ -166,6 +195,7 @@ export type RealtimeEvent =
   | TimePatchEnvelope
   | SeasonPatchEnvelope
   | CityPatchEnvelope
+  | AgentPatchEnvelope
   | NarrativeEvent
   | NarrativeResponseEvent;
 

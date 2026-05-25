@@ -8,7 +8,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     events::{
-        DayAdvancedEvent, EventMeta, PauseChangedEvent, SUBJECT_TIME_DAY_ADVANCED,
+        DayAdvancedEvent, EventMeta, MatchFinishedEvent, PauseChangedEvent,
+        SUBJECT_AGENT_STATE_CHANGED, SUBJECT_MATCH_FINISHED, SUBJECT_TIME_DAY_ADVANCED,
         SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED,
         SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
     },
@@ -19,7 +20,7 @@ use crate::{
 const TICK_INTERVAL: Duration = Duration::from_millis(100);
 const SCHEMA_VERSION: u16 = 1;
 
-pub async fn run(client: Client, store: Store, mut state: SimulationState) -> Result<()> {
+pub async fn run(client: Client, mut store: Store, mut state: SimulationState) -> Result<()> {
     let mut session_started = client
         .subscribe(SUBJECT_TIME_SESSION_STARTED)
         .await
@@ -36,6 +37,10 @@ pub async fn run(client: Client, store: Store, mut state: SimulationState) -> Re
         .subscribe(SUBJECT_TIME_PAUSE_CHANGED)
         .await
         .context("subscribe tiempo.pausa_activada")?;
+    let mut match_finished = client
+        .subscribe(SUBJECT_MATCH_FINISHED)
+        .await
+        .context("subscribe partido.terminado")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -115,8 +120,60 @@ pub async fn run(client: Client, store: Store, mut state: SimulationState) -> Re
                 store.save_simulation_state(&state).await?;
                 info!(game_id = %state.game_id, paused = state.paused, "simulation pause changed");
             }
+            Some(message) = match_finished.next() => {
+                let event = match decode_event::<MatchFinishedEvent>(SUBJECT_MATCH_FINISHED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+                if event.meta.game_id != state.game_id {
+                    continue;
+                }
+
+                process_match_finished(&client, &mut store, event).await?;
+            }
         }
     }
+
+    Ok(())
+}
+
+async fn process_match_finished(
+    client: &Client,
+    store: &mut Store,
+    event: MatchFinishedEvent,
+) -> Result<()> {
+    let occurred_at = now_rfc3339();
+    let Some(changes) = store
+        .apply_match_finished(&event, occurred_at)
+        .await
+        .with_context(|| {
+            format!(
+                "apply agent reactions game={} match={}",
+                event.meta.game_id, event.match_id
+            )
+        })?
+    else {
+        debug!(
+            game_id = %event.meta.game_id,
+            match_id = %event.match_id,
+            "agent match reaction already processed"
+        );
+        return Ok(());
+    };
+
+    for change in changes {
+        let payload = serde_json::to_vec(&change.event).context("encode agente.estado_cambio")?;
+        client
+            .publish(SUBJECT_AGENT_STATE_CHANGED, payload.into())
+            .await
+            .context("publish agente.estado_cambio")?;
+    }
+
+    info!(
+        game_id = %event.meta.game_id,
+        match_id = %event.match_id,
+        "agent states updated from match result"
+    );
 
     Ok(())
 }
