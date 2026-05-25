@@ -11,13 +11,14 @@ import type {
   NarrativeChoice,
   NarrativeEvent,
   RealtimeEvent,
+  RelationshipClientStates,
   RosterClientStates,
   SeasonClientState,
   SeasonMatchSummary,
   TimeClientState,
   UserSession,
 } from "../../../types";
-import { clampPage, pageFromPath } from "../helpers";
+import { clampPage, pageFromPath, relationshipId } from "../helpers";
 import {
   flowPages,
   initialDraft,
@@ -66,6 +67,7 @@ const initialCityState: CityClientState = {
 
 const initialAgentStates: AgentClientStates = {};
 const initialRosterStates: RosterClientStates = {};
+const initialRelationshipStates: RelationshipClientStates = {};
 
 export function useNewGameFlow() {
   const [draft, setDraft] = useState<NewGameDraft>(initialDraft);
@@ -85,6 +87,8 @@ export function useNewGameFlow() {
   const [cityState, setCityState] = useState<CityClientState>(initialCityState);
   const [agentStates, setAgentStates] = useState<AgentClientStates>(initialAgentStates);
   const [rosterStates, setRosterStates] = useState<RosterClientStates>(initialRosterStates);
+  const [relationshipStates, setRelationshipStates] =
+    useState<RelationshipClientStates>(initialRelationshipStates);
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
   const [narrativeInbox, setNarrativeInbox] = useState<NarrativeEvent[]>([]);
   const [activeNarrativeEvent, setActiveNarrativeEvent] = useState<NarrativeEvent | null>(null);
@@ -269,6 +273,24 @@ export function useNewGameFlow() {
           next[player.player_id] = {
             ...current[player.player_id],
             ...player,
+            simulated_date: payload.patch.simulated_date,
+            source_event_id: payload.patch.source_event_id,
+            source_subject: payload.patch.source_subject,
+          };
+        }
+        return next;
+      });
+      return;
+    }
+
+    if (payload.type === "relations.patch") {
+      setRelationshipStates((current) => {
+        const next = { ...current };
+        for (const relationship of payload.patch.relationships) {
+          const id = relationshipId(relationship.agent_a_id, relationship.agent_b_id);
+          next[id] = {
+            relationship_id: id,
+            ...relationship,
             simulated_date: payload.patch.simulated_date,
             source_event_id: payload.patch.source_event_id,
             source_subject: payload.patch.source_subject,
@@ -595,6 +617,7 @@ export function useNewGameFlow() {
     setCityState(initialCityState);
     setAgentStates(initialAgentStates);
     setRosterStates(initialRosterStates);
+    setRelationshipStates(initialRelationshipStates);
     setOwnerIntroResponse(null);
     setActiveNarrativeEvent(null);
 
@@ -1025,6 +1048,7 @@ export function useNewGameFlow() {
     narrativeInbox,
     ownerIntroResponse,
     recentResults,
+    relationshipStates,
     rosterStates,
     restoringSession,
     selectedGame,

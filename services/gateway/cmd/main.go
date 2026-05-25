@@ -180,6 +180,18 @@ func main() {
 		log.Fatalf("subscribe agent state events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectAgentRelationChanged, func(_ string, data []byte) {
+		var event domain.AgentRelationshipChangedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode agent relationship changed: %v", err)
+			return
+		}
+
+		hub.Broadcast(domain.RelationsPatchFromRelationshipChanged(event))
+	}); err != nil {
+		log.Fatalf("subscribe agent relationship events: %v", err)
+	}
+
 	if _, err := bus.Subscribe(domain.SubjectRosterPatchDelta, func(_ string, data []byte) {
 		var event domain.RosterPatchEnvelope
 		if err := json.Unmarshal(data, &event); err != nil {

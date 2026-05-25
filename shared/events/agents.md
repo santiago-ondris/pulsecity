@@ -5,6 +5,7 @@ Contratos de agentes para Milestone 2. El dueño del estado emocional es `agent-
 ## Subjects
 
 - `agente.estado_cambio`
+- `agente.relacion_cambio`
 - `agente.evento_critico`
 
 ## Agentes core M2
@@ -64,6 +65,37 @@ Notas:
 - `state` permite variables distintas por agente sin abrir todavia una matriz de relaciones.
 - los valores numericos se mantienen en rango `-1.0` a `1.0`, salvo variables que el dominio documente distinto.
 - el `gateway` traduce `agente.estado_cambio` a `agent.patch`.
+
+## `agente.relacion_cambio`
+
+Publicado por `agent-service` cuando una relacion canonica cambia por un evento sistemico.
+
+```json
+{
+  "event_id": "uuid",
+  "game_id": "uuid",
+  "occurred_at": "2026-05-25T00:00:04Z",
+  "schema_version": 1,
+  "simulated_date": "2026-10-22",
+  "agent_a_id": "head_coach",
+  "agent_b_id": "head_analytics",
+  "trust": -0.22,
+  "trend": "deteriorating",
+  "last_event": "La derrota amplia reabre la tension entre datos y decisiones de cancha.",
+  "short_history": [
+    "Guerra fria entre ojo y dato",
+    "La derrota amplia reabre la tension entre datos y decisiones de cancha."
+  ],
+  "source_event_id": "match-finished-match-1",
+  "source_subject": "partido.terminado"
+}
+```
+
+Notas:
+
+- la relacion se identifica por el par canonico `(agent_a_id, agent_b_id)`.
+- la idempotencia se controla por `(game_id, relationship_key, source_event_id)`.
+- el `gateway` traduce `agente.relacion_cambio` a `relations.patch`.
 
 ## Variables iniciales M2.11
 

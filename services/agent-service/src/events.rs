@@ -10,6 +10,7 @@ pub const SUBJECT_TIME_DAY_ADVANCED: &str = "tiempo.dia_avanzado";
 pub const SUBJECT_MAP_GENERATION_STARTED: &str = "mapa.generacion_iniciada";
 pub const SUBJECT_MATCH_FINISHED: &str = "partido.terminado";
 pub const SUBJECT_AGENT_STATE_CHANGED: &str = "agente.estado_cambio";
+pub const SUBJECT_AGENT_RELATIONSHIP_CHANGED: &str = "agente.relacion_cambio";
 pub const SUBJECT_AGENT_CRITICAL_EVENT: &str = "agente.evento_critico";
 pub const SUBJECT_ROSTER_PATCH: &str = "roster.patch";
 
@@ -115,6 +116,21 @@ pub struct AgentStateChangedEvent {
     pub mood: String,
     pub state: BTreeMap<String, f64>,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentRelationshipChangedEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub simulated_date: String,
+    pub agent_a_id: String,
+    pub agent_b_id: String,
+    pub trust: f64,
+    pub trend: String,
+    pub last_event: String,
+    pub short_history: Vec<String>,
+    pub source_event_id: String,
+    pub source_subject: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

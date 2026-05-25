@@ -106,7 +106,15 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return `${event.patch.players.length} jugadores actualizaron su estado emocional`;
   }
 
+  if (event.type === "relations.patch") {
+    return `${event.patch.relationships.length} relaciones cambiaron`;
+  }
+
   return event.patch.message ?? "Patch recibido";
+}
+
+export function relationshipId(agentAId: string, agentBId: string) {
+  return [agentAId, agentBId].sort().join(":");
 }
 
 export function pageIndex(page: FlowPage) {

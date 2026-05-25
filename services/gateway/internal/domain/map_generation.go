@@ -154,17 +154,19 @@ type MapStatePatch struct {
 }
 
 const (
-	SubjectTimeSessionStarted = "tiempo.sesion_iniciada"
-	SubjectTimeSessionEnded   = "tiempo.sesion_terminada"
-	SubjectTimeSpeedChanged   = "tiempo.velocidad_cambiada"
-	SubjectTimePauseChanged   = "tiempo.pausa_activada"
-	SubjectTimeDayAdvanced    = "tiempo.dia_avanzado"
-	SubjectMatchFinished      = "partido.terminado"
-	SubjectSeasonPatchDelta   = "season.patch"
-	SubjectCityPatchDelta     = "city.patch"
-	SubjectAgentStateChanged  = "agente.estado_cambio"
-	SubjectAgentPatchDelta    = "agent.patch"
-	SubjectRosterPatchDelta   = "roster.patch"
+	SubjectTimeSessionStarted   = "tiempo.sesion_iniciada"
+	SubjectTimeSessionEnded     = "tiempo.sesion_terminada"
+	SubjectTimeSpeedChanged     = "tiempo.velocidad_cambiada"
+	SubjectTimePauseChanged     = "tiempo.pausa_activada"
+	SubjectTimeDayAdvanced      = "tiempo.dia_avanzado"
+	SubjectMatchFinished        = "partido.terminado"
+	SubjectSeasonPatchDelta     = "season.patch"
+	SubjectCityPatchDelta       = "city.patch"
+	SubjectAgentStateChanged    = "agente.estado_cambio"
+	SubjectAgentRelationChanged = "agente.relacion_cambio"
+	SubjectAgentPatchDelta      = "agent.patch"
+	SubjectRosterPatchDelta     = "roster.patch"
+	SubjectRelationsPatchDelta  = "relations.patch"
 )
 
 type EventMeta struct {
@@ -316,6 +318,65 @@ type PlayerEmotionalPatch struct {
 	CompetitiveDrive float64 `json:"competitive_drive"`
 	CityConnection   float64 `json:"city_connection"`
 	Summary          string  `json:"summary"`
+}
+
+type AgentRelationshipChangedEvent struct {
+	EventMeta
+	SimulatedDate string   `json:"simulated_date"`
+	AgentAID      string   `json:"agent_a_id"`
+	AgentBID      string   `json:"agent_b_id"`
+	Trust         float64  `json:"trust"`
+	Trend         string   `json:"trend"`
+	LastEvent     string   `json:"last_event"`
+	ShortHistory  []string `json:"short_history"`
+	SourceEventID string   `json:"source_event_id"`
+	SourceSubject string   `json:"source_subject"`
+}
+
+type RelationsPatchEnvelope struct {
+	Type    string              `json:"type"`
+	Subject string              `json:"subject"`
+	GameID  string              `json:"game_id"`
+	Patch   RelationsStatePatch `json:"patch"`
+}
+
+type RelationsStatePatch struct {
+	SimulatedDate string              `json:"simulated_date"`
+	SourceEventID string              `json:"source_event_id"`
+	SourceSubject string              `json:"source_subject"`
+	Relationships []RelationshipPatch `json:"relationships"`
+}
+
+type RelationshipPatch struct {
+	AgentAID     string   `json:"agent_a_id"`
+	AgentBID     string   `json:"agent_b_id"`
+	Trust        float64  `json:"trust"`
+	Trend        string   `json:"trend"`
+	LastEvent    string   `json:"last_event"`
+	ShortHistory []string `json:"short_history"`
+}
+
+func RelationsPatchFromRelationshipChanged(event AgentRelationshipChangedEvent) RelationsPatchEnvelope {
+	return RelationsPatchEnvelope{
+		Type:    SubjectRelationsPatchDelta,
+		Subject: SubjectRelationsPatchDelta,
+		GameID:  event.GameID,
+		Patch: RelationsStatePatch{
+			SimulatedDate: event.SimulatedDate,
+			SourceEventID: event.SourceEventID,
+			SourceSubject: event.SourceSubject,
+			Relationships: []RelationshipPatch{
+				{
+					AgentAID:     event.AgentAID,
+					AgentBID:     event.AgentBID,
+					Trust:        event.Trust,
+					Trend:        event.Trend,
+					LastEvent:    event.LastEvent,
+					ShortHistory: event.ShortHistory,
+				},
+			},
+		},
+	}
 }
 
 func AgentPatchFromStateChanged(event AgentStateChangedEvent) AgentPatchEnvelope {

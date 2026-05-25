@@ -12,6 +12,7 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
 - `city.patch`
 - `agent.patch`
 - `roster.patch`
+- `relations.patch`
 - `narrative.event`
 
 ## `time.patch`
@@ -115,6 +116,30 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
         "competitive_drive": 0.72,
         "city_connection": 0.38,
         "summary": "Mateo Cross procesa la victoria con rol alto y 26 puntos."
+      }
+    ]
+  }
+}
+```
+
+## `relations.patch`
+
+```json
+{
+  "type": "relations.patch",
+  "game_id": "uuid",
+  "patch": {
+    "simulated_date": "2026-10-22",
+    "source_event_id": "match-finished-match-1",
+    "source_subject": "partido.terminado",
+    "relationships": [
+      {
+        "agent_a_id": "head_coach",
+        "agent_b_id": "head_analytics",
+        "trust": -0.22,
+        "trend": "deteriorating",
+        "last_event": "La derrota amplia reabre la tension entre datos y decisiones de cancha.",
+        "short_history": []
       }
     ]
   }

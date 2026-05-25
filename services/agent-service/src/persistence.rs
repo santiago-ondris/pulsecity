@@ -3,9 +3,10 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::{
     agents::{
-        CoreAgentState, IndividualAgentState, MatchAgentReactions, PlayerAgentState,
-        TeamRosterPlayer, apply_match_finished, apply_match_to_player_agents,
-        default_core_agent_state, default_individual_agent_states, default_player_agent_state,
+        AgentRelationship, CoreAgentState, IndividualAgentState, MatchAgentReactions,
+        PlayerAgentState, TeamRosterPlayer, apply_match_finished, apply_match_to_player_agents,
+        apply_match_to_relationships, default_agent_relationships, default_core_agent_state,
+        default_individual_agent_states, default_player_agent_state,
     },
     events::MatchFinishedEvent,
     simulation::SimulationState,
@@ -93,6 +94,29 @@ CREATE TABLE IF NOT EXISTS agent_player_states (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (game_id, player_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_relationships (
+    game_id TEXT NOT NULL,
+    relationship_key TEXT NOT NULL,
+    agent_a_id TEXT NOT NULL,
+    agent_b_id TEXT NOT NULL,
+    trust DOUBLE PRECISION NOT NULL,
+    last_event TEXT NOT NULL,
+    trend TEXT NOT NULL,
+    short_history_json TEXT NOT NULL,
+    last_source_event_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, relationship_key)
+);
+
+CREATE TABLE IF NOT EXISTS agent_relationship_event_hashes (
+    game_id TEXT NOT NULL,
+    relationship_key TEXT NOT NULL,
+    source_event_id TEXT NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, relationship_key, source_event_id)
 );
 
 CREATE TABLE IF NOT EXISTS agent_processed_matches (
@@ -190,6 +214,7 @@ ON CONFLICT (game_id) DO UPDATE SET
     ) -> Result<SimulationState> {
         self.ensure_individual_agents(game_id).await?;
         self.ensure_player_agents(game_id).await?;
+        self.ensure_agent_relationships(game_id).await?;
         if let Some(state) = self.load_simulation_state(game_id).await? {
             return Ok(state);
         }
@@ -252,6 +277,36 @@ WHERE game_id = $1;
             )
             .await
             .with_context(|| "count player agent states")?;
+
+        Ok(row.get(0))
+    }
+
+    pub async fn ensure_agent_relationships(&self, game_id: &str) -> Result<u64> {
+        let relationships = default_agent_relationships(game_id);
+        let mut inserted = 0;
+
+        for relationship in relationships {
+            inserted += self
+                .insert_agent_relationship_if_missing(&relationship)
+                .await?;
+        }
+
+        Ok(inserted)
+    }
+
+    pub async fn count_agent_relationships(&self, game_id: &str) -> Result<i64> {
+        let row = self
+            .client
+            .query_one(
+                "
+SELECT COUNT(*)
+FROM agent_relationships
+WHERE game_id = $1;
+",
+                &[&game_id],
+            )
+            .await
+            .with_context(|| "count agent relationships")?;
 
         Ok(row.get(0))
     }
@@ -379,6 +434,50 @@ ON CONFLICT (game_id, player_id) DO NOTHING;
             .with_context(|| "insert player agent state")
     }
 
+    async fn insert_agent_relationship_if_missing(
+        &self,
+        relationship: &AgentRelationship,
+    ) -> Result<u64> {
+        let short_history_json = serde_json::to_string(&relationship.short_history)
+            .with_context(|| "encode relationship short history json")?;
+        let key =
+            crate::agents::relationship_key(&relationship.agent_a_id, &relationship.agent_b_id);
+
+        self.client
+            .execute(
+                "
+INSERT INTO agent_relationships (
+    game_id,
+    relationship_key,
+    agent_a_id,
+    agent_b_id,
+    trust,
+    last_event,
+    trend,
+    short_history_json,
+    last_source_event_id,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+ON CONFLICT (game_id, relationship_key) DO NOTHING;
+",
+                &[
+                    &relationship.game_id,
+                    &key,
+                    &relationship.agent_a_id,
+                    &relationship.agent_b_id,
+                    &relationship.trust,
+                    &relationship.last_event,
+                    &relationship.trend,
+                    &short_history_json,
+                    &relationship.last_source_event_id,
+                ],
+            )
+            .await
+            .with_context(|| "insert agent relationship")
+    }
+
     pub async fn apply_match_finished(
         &mut self,
         event: &MatchFinishedEvent,
@@ -418,7 +517,7 @@ ON CONFLICT (game_id, match_id) DO NOTHING;
                 .push(load_core_agent_state(&transaction, &event.meta.game_id, agent_id).await?);
         }
 
-        let changes = apply_match_finished(current_states, event, occurred_at);
+        let changes = apply_match_finished(current_states, event, occurred_at.clone());
         for change in &changes {
             save_core_agent_state(&transaction, &change.state).await?;
         }
@@ -427,6 +526,28 @@ ON CONFLICT (game_id, match_id) DO NOTHING;
             apply_match_to_player_agents(player_states, event);
         for state in &updated_player_states {
             save_player_agent_state(&transaction, state).await?;
+        }
+        let relationship_states =
+            load_agent_relationships(&transaction, &event.meta.game_id).await?;
+        let relationship_changes =
+            apply_match_to_relationships(relationship_states, event, occurred_at.clone());
+        let mut persisted_relationship_changes = Vec::with_capacity(relationship_changes.len());
+        for change in relationship_changes {
+            let key = crate::agents::relationship_key(
+                &change.relationship.agent_a_id,
+                &change.relationship.agent_b_id,
+            );
+            if mark_relationship_event_processed(
+                &transaction,
+                &event.meta.game_id,
+                &key,
+                &event.meta.event_id,
+            )
+            .await?
+            {
+                save_agent_relationship(&transaction, &change.relationship).await?;
+                persisted_relationship_changes.push(change);
+            }
         }
 
         transaction
@@ -437,6 +558,7 @@ ON CONFLICT (game_id, match_id) DO NOTHING;
         Ok(Some(MatchAgentReactions {
             core_agent_changes: changes,
             roster_patch,
+            relationship_changes: persisted_relationship_changes,
         }))
     }
 }
@@ -613,6 +735,130 @@ ON CONFLICT (game_id, player_id) DO UPDATE SET
         )
         .await
         .with_context(|| "save player agent state")?;
+
+    Ok(())
+}
+
+async fn load_agent_relationships(
+    transaction: &tokio_postgres::Transaction<'_>,
+    game_id: &str,
+) -> Result<Vec<AgentRelationship>> {
+    let rows = transaction
+        .query(
+            "
+SELECT
+    game_id,
+    agent_a_id,
+    agent_b_id,
+    trust,
+    last_event,
+    trend,
+    short_history_json,
+    last_source_event_id
+FROM agent_relationships
+WHERE game_id = $1
+ORDER BY relationship_key ASC;
+",
+            &[&game_id],
+        )
+        .await
+        .with_context(|| "load agent relationships")?;
+
+    let mut relationships = Vec::with_capacity(rows.len());
+    for row in rows {
+        let short_history_json: String = row.get("short_history_json");
+        let short_history = serde_json::from_str(&short_history_json)
+            .with_context(|| "decode relationship short history json")?;
+        relationships.push(AgentRelationship {
+            game_id: row.get("game_id"),
+            agent_a_id: row.get("agent_a_id"),
+            agent_b_id: row.get("agent_b_id"),
+            trust: row.get("trust"),
+            last_event: row.get("last_event"),
+            trend: row.get("trend"),
+            short_history,
+            last_source_event_id: row.get("last_source_event_id"),
+        });
+    }
+
+    Ok(relationships)
+}
+
+async fn mark_relationship_event_processed(
+    transaction: &tokio_postgres::Transaction<'_>,
+    game_id: &str,
+    relationship_key: &str,
+    source_event_id: &str,
+) -> Result<bool> {
+    let processed = transaction
+        .execute(
+            "
+INSERT INTO agent_relationship_event_hashes (
+    game_id,
+    relationship_key,
+    source_event_id,
+    processed_at
+)
+VALUES ($1, $2, $3, NOW())
+ON CONFLICT (game_id, relationship_key, source_event_id) DO NOTHING;
+",
+            &[&game_id, &relationship_key, &source_event_id],
+        )
+        .await
+        .with_context(|| "mark relationship event processed")?;
+
+    Ok(processed > 0)
+}
+
+async fn save_agent_relationship(
+    transaction: &tokio_postgres::Transaction<'_>,
+    relationship: &AgentRelationship,
+) -> Result<()> {
+    let short_history_json = serde_json::to_string(&relationship.short_history)
+        .with_context(|| "encode relationship short history json")?;
+    let key = crate::agents::relationship_key(&relationship.agent_a_id, &relationship.agent_b_id);
+
+    transaction
+        .execute(
+            "
+INSERT INTO agent_relationships (
+    game_id,
+    relationship_key,
+    agent_a_id,
+    agent_b_id,
+    trust,
+    last_event,
+    trend,
+    short_history_json,
+    last_source_event_id,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+ON CONFLICT (game_id, relationship_key) DO UPDATE SET
+    agent_a_id = EXCLUDED.agent_a_id,
+    agent_b_id = EXCLUDED.agent_b_id,
+    trust = EXCLUDED.trust,
+    last_event = EXCLUDED.last_event,
+    trend = EXCLUDED.trend,
+    short_history_json = EXCLUDED.short_history_json,
+    last_source_event_id = EXCLUDED.last_source_event_id,
+    updated_at = NOW();
+",
+            &[
+                &relationship.game_id,
+                &key,
+                &relationship.agent_a_id,
+                &relationship.agent_b_id,
+                &relationship.trust,
+                &relationship.last_event,
+                &relationship.trend,
+                &short_history_json,
+                &relationship.last_source_event_id,
+            ],
+        )
+        .await
+        .with_context(|| "save agent relationship")?;
 
     Ok(())
 }

@@ -12,10 +12,11 @@ use tracing::{debug, error, info, warn};
 use crate::{
     events::{
         DayAdvancedEvent, EventMeta, MapGenerationStartedEvent, MatchFinishedEvent,
-        PauseChangedEvent, SUBJECT_AGENT_STATE_CHANGED, SUBJECT_MAP_GENERATION_STARTED,
-        SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH, SUBJECT_TIME_DAY_ADVANCED,
-        SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED,
-        SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
+        PauseChangedEvent, SUBJECT_AGENT_RELATIONSHIP_CHANGED, SUBJECT_AGENT_STATE_CHANGED,
+        SUBJECT_MAP_GENERATION_STARTED, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
+        SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED,
+        SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent,
+        SessionStartedEvent, SpeedChangedEvent,
     },
     persistence::Store,
     simulation::{SimulationAccumulator, SimulationState, advance_simulated_date},
@@ -334,6 +335,14 @@ async fn process_map_generation_started(
         .count_player_agents(&event.game_id)
         .await
         .with_context(|| format!("count player agents game={}", event.game_id))?;
+    let inserted_relationships = store
+        .ensure_agent_relationships(&event.game_id)
+        .await
+        .with_context(|| format!("seed agent relationships game={}", event.game_id))?;
+    let total_relationships = store
+        .count_agent_relationships(&event.game_id)
+        .await
+        .with_context(|| format!("count agent relationships game={}", event.game_id))?;
 
     info!(
         game_id = %event.game_id,
@@ -341,6 +350,8 @@ async fn process_map_generation_started(
         total,
         inserted_players,
         total_players,
+        inserted_relationships,
+        total_relationships,
         "individual agents ready"
     );
 
@@ -384,6 +395,13 @@ async fn process_match_finished(
             .publish(SUBJECT_ROSTER_PATCH, payload.into())
             .await
             .context("publish roster.patch")?;
+    }
+    for change in changes.relationship_changes {
+        let payload = serde_json::to_vec(&change.event).context("encode agente.relacion_cambio")?;
+        client
+            .publish(SUBJECT_AGENT_RELATIONSHIP_CHANGED, payload.into())
+            .await
+            .context("publish agente.relacion_cambio")?;
     }
 
     info!(

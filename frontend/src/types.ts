@@ -187,6 +187,42 @@ export interface RosterPatchEnvelope {
   };
 }
 
+export interface RelationshipClientState {
+  relationship_id: string;
+  agent_a_id: string;
+  agent_b_id: string;
+  trust: number;
+  trend: string;
+  last_event: string;
+  short_history: string[];
+  simulated_date?: string;
+  source_event_id?: string;
+  source_subject?: string;
+}
+
+export type RelationshipClientStates = Record<string, RelationshipClientState>;
+
+export interface RelationshipPatch {
+  agent_a_id: string;
+  agent_b_id: string;
+  trust: number;
+  trend: string;
+  last_event: string;
+  short_history: string[];
+}
+
+export interface RelationsPatchEnvelope {
+  type: "relations.patch";
+  subject: string;
+  game_id: string;
+  patch: {
+    simulated_date: string;
+    source_event_id: string;
+    source_subject: string;
+    relationships: RelationshipPatch[];
+  };
+}
+
 export interface NarrativeChoice {
   id: string;
   label: string;
@@ -225,6 +261,7 @@ export type RealtimeEvent =
   | CityPatchEnvelope
   | AgentPatchEnvelope
   | RosterPatchEnvelope
+  | RelationsPatchEnvelope
   | NarrativeEvent
   | NarrativeResponseEvent;
 

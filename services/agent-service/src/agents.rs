@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::events::{
-    AgentStateChangedEvent, EventMeta, MatchFinishedEvent, PlayerBoxScore, PlayerEmotionalPatch,
-    RosterPatchEnvelope, RosterStatePatch, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
+    AgentRelationshipChangedEvent, AgentStateChangedEvent, EventMeta, MatchFinishedEvent,
+    PlayerBoxScore, PlayerEmotionalPatch, RosterPatchEnvelope, RosterStatePatch,
+    SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
 };
 
 pub const OWN_TEAM_ID: &str = "pulsecity";
@@ -64,6 +65,35 @@ pub struct PlayerAgentState {
 pub struct MatchAgentReactions {
     pub core_agent_changes: Vec<AgentStateChange>,
     pub roster_patch: Option<RosterPatchEnvelope>,
+    pub relationship_changes: Vec<AgentRelationshipChange>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRelationship {
+    pub game_id: String,
+    pub agent_a_id: String,
+    pub agent_b_id: String,
+    pub trust: f64,
+    pub last_event: String,
+    pub trend: String,
+    pub short_history: Vec<String>,
+    pub last_source_event_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRelationshipChange {
+    pub relationship: AgentRelationship,
+    pub event: AgentRelationshipChangedEvent,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRelationshipSeed {
+    pub agent_a_id: &'static str,
+    pub agent_b_id: &'static str,
+    pub trust: f64,
+    pub last_event: &'static str,
+    pub trend: &'static str,
+    pub short_history: Vec<&'static str>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +157,106 @@ pub fn default_player_agent_state(player: &TeamRosterPlayer) -> PlayerAgentState
         competitive_drive: clamp_unit(0.58 + rating_factor * 0.22),
         city_connection: 0.35,
         last_match_id: None,
+    }
+}
+
+#[must_use]
+pub fn default_agent_relationships(game_id: &str) -> Vec<AgentRelationship> {
+    canonical_relationship_seeds()
+        .into_iter()
+        .map(|seed| seed.into_relationship(game_id))
+        .collect()
+}
+
+#[must_use]
+pub fn canonical_relationship_seeds() -> Vec<AgentRelationshipSeed> {
+    vec![
+        relationship_seed(
+            "head_coach",
+            "head_analytics",
+            -0.18,
+            "Guerra fria entre ojo y dato",
+            "stable",
+        ),
+        relationship_seed(
+            "head_coach",
+            "team_doctor",
+            -0.22,
+            "Disponibilidad vs salud del jugador",
+            "stable",
+        ),
+        relationship_seed(
+            "head_coach",
+            "player_development_director",
+            -0.12,
+            "Desarrollo de largo plazo vs necesidades inmediatas",
+            "stable",
+        ),
+        relationship_seed(
+            "scouting_director",
+            "head_analytics",
+            -0.20,
+            "Evaluacion tradicional vs modelos",
+            "stable",
+        ),
+        relationship_seed(
+            "marketing_director",
+            "gm",
+            -0.08,
+            "Jugador marketeable vs jugador optimo",
+            "stable",
+        ),
+        relationship_seed(
+            "cfo",
+            "gm",
+            -0.10,
+            "Presupuesto vs calidad del roster",
+            "stable",
+        ),
+        relationship_seed(
+            "mayor",
+            "owner",
+            -0.14,
+            "Agenda politica vs intereses de la franquicia",
+            "stable",
+        ),
+        relationship_seed(
+            "chamber_commerce_president",
+            "mayor",
+            0.04,
+            "Agenda economica y agenda politica se observan de cerca",
+            "stable",
+        ),
+        relationship_seed(
+            "sports_psychologist",
+            "head_coach",
+            -0.16,
+            "Bienestar del jugador vs disponibilidad inmediata",
+            "stable",
+        ),
+        relationship_seed(
+            "pr_director",
+            "gm",
+            -0.06,
+            "Control narrativo vs decisiones del GM",
+            "stable",
+        ),
+        relationship_seed(
+            "press",
+            "roster_collective",
+            -0.12,
+            "Cobertura vs privacidad y estado emocional de jugadores",
+            "stable",
+        ),
+    ]
+}
+
+#[must_use]
+pub fn relationship_key(agent_a_id: &str, agent_b_id: &str) -> String {
+    if agent_a_id <= agent_b_id {
+        format!("{agent_a_id}:{agent_b_id}")
+    } else {
+        format!("{agent_b_id}:{agent_a_id}")
     }
 }
 
@@ -900,6 +1030,21 @@ impl IndividualAgentTemplate {
     }
 }
 
+impl AgentRelationshipSeed {
+    fn into_relationship(self, game_id: &str) -> AgentRelationship {
+        AgentRelationship {
+            game_id: game_id.to_string(),
+            agent_a_id: self.agent_a_id.to_string(),
+            agent_b_id: self.agent_b_id.to_string(),
+            trust: clamp(self.trust),
+            last_event: self.last_event.to_string(),
+            trend: self.trend.to_string(),
+            short_history: self.short_history.into_iter().map(str::to_string).collect(),
+            last_source_event_id: None,
+        }
+    }
+}
+
 fn template(
     agent_id: &'static str,
     display_name: &'static str,
@@ -927,6 +1072,23 @@ fn template(
         role_performance,
         state: map_from_pairs(state),
         agenda: string_map_from_pairs(agenda),
+    }
+}
+
+fn relationship_seed(
+    agent_a_id: &'static str,
+    agent_b_id: &'static str,
+    trust: f64,
+    last_event: &'static str,
+    trend: &'static str,
+) -> AgentRelationshipSeed {
+    AgentRelationshipSeed {
+        agent_a_id,
+        agent_b_id,
+        trust,
+        last_event,
+        trend,
+        short_history: vec![last_event],
     }
 }
 
@@ -1039,6 +1201,30 @@ pub fn apply_match_to_player_agents(
     };
 
     (next_states, roster_patch)
+}
+
+#[must_use]
+pub fn apply_match_to_relationships(
+    current_relationships: Vec<AgentRelationship>,
+    event: &MatchFinishedEvent,
+    occurred_at: String,
+) -> Vec<AgentRelationshipChange> {
+    let context = MatchContext::from_event(event);
+    let mut changes = Vec::new();
+
+    for mut relationship in current_relationships {
+        let Some((delta, reason)) = relationship_delta_for_match(&relationship, &context) else {
+            continue;
+        };
+        apply_relationship_delta(&mut relationship, delta, reason, &event.meta.event_id);
+
+        changes.push(AgentRelationshipChange {
+            event: relationship_changed_event(&relationship, event, &occurred_at),
+            relationship,
+        });
+    }
+
+    changes
 }
 
 fn apply_match_to_agent(
@@ -1276,6 +1462,146 @@ fn apply_box_score_to_player(
         "steady"
     }
     .to_string();
+}
+
+fn relationship_delta_for_match(
+    relationship: &AgentRelationship,
+    context: &MatchContext,
+) -> Option<(f64, &'static str)> {
+    let key = relationship_key(&relationship.agent_a_id, &relationship.agent_b_id);
+    match key.as_str() {
+        "head_analytics:head_coach" => {
+            if context.won {
+                Some((
+                    0.015,
+                    "El resultado reduce la friccion entre modelo y rotacion.",
+                ))
+            } else if context.blowout {
+                Some((
+                    -0.035,
+                    "La derrota amplia reabre la tension entre datos y decisiones de cancha.",
+                ))
+            } else {
+                Some((
+                    -0.012,
+                    "La derrota deja mas preguntas sobre la lectura tactica.",
+                ))
+            }
+        }
+        "head_coach:sports_psychologist" => {
+            if context.won {
+                Some((
+                    0.012,
+                    "La victoria baja la tension sobre el manejo emocional del vestuario.",
+                ))
+            } else {
+                Some((
+                    -0.025,
+                    "La derrota aumenta la tension entre bienestar y exigencia competitiva.",
+                ))
+            }
+        }
+        "mayor:owner" => {
+            if context.home_game && context.won {
+                Some((
+                    0.012,
+                    "Una victoria local mejora la lectura civica del proyecto.",
+                ))
+            } else if context.home_game {
+                Some((
+                    -0.018,
+                    "Una derrota local enfria el valor politico del proyecto.",
+                ))
+            } else {
+                None
+            }
+        }
+        "gm:pr_director" => {
+            if context.blowout && !context.won {
+                Some((
+                    -0.025,
+                    "La derrota amplia complica la narrativa publica del GM.",
+                ))
+            } else if context.won {
+                Some((
+                    0.01,
+                    "La victoria hace mas defendible la direccion publica del GM.",
+                ))
+            } else {
+                None
+            }
+        }
+        "press:roster_collective" => {
+            if context.blowout && !context.won {
+                Some((
+                    -0.03,
+                    "La cobertura se endurece sobre el estado emocional del roster.",
+                ))
+            } else if context.won {
+                Some((
+                    0.015,
+                    "La cobertura positiva reduce presion sobre el vestuario.",
+                ))
+            } else {
+                Some((
+                    -0.01,
+                    "La derrota sostiene una cobertura mas incomoda para el roster.",
+                ))
+            }
+        }
+        _ => None,
+    }
+}
+
+fn apply_relationship_delta(
+    relationship: &mut AgentRelationship,
+    delta: f64,
+    reason: &str,
+    source_event_id: &str,
+) {
+    relationship.trust = clamp(relationship.trust + delta);
+    relationship.trend = if delta > 0.0 {
+        "improving"
+    } else if delta < 0.0 {
+        "deteriorating"
+    } else {
+        "stable"
+    }
+    .to_string();
+    relationship.last_event = reason.to_string();
+    relationship.last_source_event_id = Some(source_event_id.to_string());
+    relationship.short_history.push(reason.to_string());
+    if relationship.short_history.len() > 5 {
+        relationship.short_history.remove(0);
+    }
+}
+
+fn relationship_changed_event(
+    relationship: &AgentRelationship,
+    event: &MatchFinishedEvent,
+    occurred_at: &str,
+) -> AgentRelationshipChangedEvent {
+    AgentRelationshipChangedEvent {
+        meta: EventMeta {
+            event_id: format!(
+                "agent-relationship-{}-{}",
+                event.meta.event_id,
+                relationship_key(&relationship.agent_a_id, &relationship.agent_b_id)
+            ),
+            game_id: event.meta.game_id.clone(),
+            occurred_at: occurred_at.to_string(),
+            schema_version: SCHEMA_VERSION,
+        },
+        simulated_date: event.simulated_date.clone(),
+        agent_a_id: relationship.agent_a_id.clone(),
+        agent_b_id: relationship.agent_b_id.clone(),
+        trust: relationship.trust,
+        trend: relationship.trend.clone(),
+        last_event: relationship.last_event.clone(),
+        short_history: relationship.short_history.clone(),
+        source_event_id: event.meta.event_id.clone(),
+        source_subject: SUBJECT_MATCH_FINISHED.to_string(),
+    }
 }
 
 fn player_patch(
@@ -1526,6 +1852,48 @@ mod tests {
         assert_eq!(patch.event_type, SUBJECT_ROSTER_PATCH);
         assert_eq!(patch.patch.players.len(), 1);
         assert_eq!(patch.patch.players[0].player_id, "game-1-player-01");
+    }
+
+    #[test]
+    fn relationship_catalog_seeds_canon_tensions() {
+        let relationships = default_agent_relationships("game-1");
+
+        assert!(
+            relationships
+                .iter()
+                .any(|relationship| relationship.agent_a_id == "head_coach"
+                    && relationship.agent_b_id == "team_doctor")
+        );
+        assert!(relationships.iter().any(
+            |relationship| relationship.agent_a_id == "cfo" && relationship.agent_b_id == "gm"
+        ));
+        assert!(
+            relationships
+                .iter()
+                .any(|relationship| relationship.agent_a_id == "press"
+                    && relationship.agent_b_id == "roster_collective")
+        );
+    }
+
+    #[test]
+    fn match_result_moves_relevant_relationships() {
+        let event = sample_match(false, 88, 111);
+        let relationships = default_agent_relationships("game-1");
+
+        let changes =
+            apply_match_to_relationships(relationships, &event, "2026-05-25T00:00:00Z".to_string());
+
+        let coach_analytics = changes
+            .iter()
+            .find(|change| {
+                relationship_key(
+                    &change.relationship.agent_a_id,
+                    &change.relationship.agent_b_id,
+                ) == "head_analytics:head_coach"
+            })
+            .expect("coach analytics relationship moves");
+        assert_eq!(coach_analytics.relationship.trend, "deteriorating");
+        assert_eq!(coach_analytics.event.source_subject, SUBJECT_MATCH_FINISHED);
     }
 
     #[test]
