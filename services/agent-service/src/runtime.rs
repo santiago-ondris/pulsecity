@@ -13,9 +13,9 @@ use crate::{
     events::{
         DayAdvancedEvent, EventMeta, MapGenerationStartedEvent, MatchFinishedEvent,
         PauseChangedEvent, SUBJECT_AGENT_STATE_CHANGED, SUBJECT_MAP_GENERATION_STARTED,
-        SUBJECT_MATCH_FINISHED, SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED,
-        SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED,
-        SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
+        SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH, SUBJECT_TIME_DAY_ADVANCED,
+        SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED,
+        SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
     },
     persistence::Store,
     simulation::{SimulationAccumulator, SimulationState, advance_simulated_date},
@@ -326,11 +326,21 @@ async fn process_map_generation_started(
         .count_individual_agents(&event.game_id)
         .await
         .with_context(|| format!("count individual agents game={}", event.game_id))?;
+    let inserted_players = store
+        .ensure_player_agents(&event.game_id)
+        .await
+        .with_context(|| format!("seed player agents game={}", event.game_id))?;
+    let total_players = store
+        .count_player_agents(&event.game_id)
+        .await
+        .with_context(|| format!("count player agents game={}", event.game_id))?;
 
     info!(
         game_id = %event.game_id,
         inserted,
         total,
+        inserted_players,
+        total_players,
         "individual agents ready"
     );
 
@@ -361,12 +371,19 @@ async fn process_match_finished(
         return Ok(());
     };
 
-    for change in changes {
+    for change in changes.core_agent_changes {
         let payload = serde_json::to_vec(&change.event).context("encode agente.estado_cambio")?;
         client
             .publish(SUBJECT_AGENT_STATE_CHANGED, payload.into())
             .await
             .context("publish agente.estado_cambio")?;
+    }
+    if let Some(roster_patch) = changes.roster_patch {
+        let payload = serde_json::to_vec(&roster_patch).context("encode roster.patch")?;
+        client
+            .publish(SUBJECT_ROSTER_PATCH, payload.into())
+            .await
+            .context("publish roster.patch")?;
     }
 
     info!(

@@ -180,6 +180,18 @@ func main() {
 		log.Fatalf("subscribe agent state events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectRosterPatchDelta, func(_ string, data []byte) {
+		var event domain.RosterPatchEnvelope
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode roster patch: %v", err)
+			return
+		}
+
+		hub.Broadcast(event)
+	}); err != nil {
+		log.Fatalf("subscribe roster patch events: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
 		Bus:       bus,

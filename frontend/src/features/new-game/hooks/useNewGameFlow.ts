@@ -11,6 +11,7 @@ import type {
   NarrativeChoice,
   NarrativeEvent,
   RealtimeEvent,
+  RosterClientStates,
   SeasonClientState,
   SeasonMatchSummary,
   TimeClientState,
@@ -64,6 +65,7 @@ const initialCityState: CityClientState = {
 };
 
 const initialAgentStates: AgentClientStates = {};
+const initialRosterStates: RosterClientStates = {};
 
 export function useNewGameFlow() {
   const [draft, setDraft] = useState<NewGameDraft>(initialDraft);
@@ -82,6 +84,7 @@ export function useNewGameFlow() {
   const [recentResults, setRecentResults] = useState<SeasonMatchSummary[]>([]);
   const [cityState, setCityState] = useState<CityClientState>(initialCityState);
   const [agentStates, setAgentStates] = useState<AgentClientStates>(initialAgentStates);
+  const [rosterStates, setRosterStates] = useState<RosterClientStates>(initialRosterStates);
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
   const [narrativeInbox, setNarrativeInbox] = useState<NarrativeEvent[]>([]);
   const [activeNarrativeEvent, setActiveNarrativeEvent] = useState<NarrativeEvent | null>(null);
@@ -255,6 +258,23 @@ export function useNewGameFlow() {
             source_subject: payload.patch.source_subject ?? previous?.source_subject,
           },
         };
+      });
+      return;
+    }
+
+    if (payload.type === "roster.patch") {
+      setRosterStates((current) => {
+        const next = { ...current };
+        for (const player of payload.patch.players) {
+          next[player.player_id] = {
+            ...current[player.player_id],
+            ...player,
+            simulated_date: payload.patch.simulated_date,
+            source_event_id: payload.patch.source_event_id,
+            source_subject: payload.patch.source_subject,
+          };
+        }
+        return next;
       });
       return;
     }
@@ -574,6 +594,7 @@ export function useNewGameFlow() {
     setSeasonState(initialSeasonState);
     setCityState(initialCityState);
     setAgentStates(initialAgentStates);
+    setRosterStates(initialRosterStates);
     setOwnerIntroResponse(null);
     setActiveNarrativeEvent(null);
 
@@ -1004,6 +1025,7 @@ export function useNewGameFlow() {
     narrativeInbox,
     ownerIntroResponse,
     recentResults,
+    rosterStates,
     restoringSession,
     selectedGame,
     selectedGameId,

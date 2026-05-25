@@ -3,8 +3,9 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::{
     agents::{
-        AgentStateChange, CoreAgentState, IndividualAgentState, apply_match_finished,
-        default_core_agent_state, default_individual_agent_states,
+        CoreAgentState, IndividualAgentState, MatchAgentReactions, PlayerAgentState,
+        TeamRosterPlayer, apply_match_finished, apply_match_to_player_agents,
+        default_core_agent_state, default_individual_agent_states, default_player_agent_state,
     },
     events::MatchFinishedEvent,
     simulation::SimulationState,
@@ -76,6 +77,23 @@ CREATE TABLE IF NOT EXISTS agent_individual_states (
 
 CREATE INDEX IF NOT EXISTS idx_agent_individual_states_game_category
 ON agent_individual_states (game_id, category);
+
+CREATE TABLE IF NOT EXISTS agent_player_states (
+    game_id TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    position TEXT NOT NULL,
+    emotional_state TEXT NOT NULL,
+    satisfaction DOUBLE PRECISION NOT NULL,
+    loyalty DOUBLE PRECISION NOT NULL,
+    ego DOUBLE PRECISION NOT NULL,
+    competitive_drive DOUBLE PRECISION NOT NULL,
+    city_connection DOUBLE PRECISION NOT NULL,
+    last_match_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, player_id)
+);
 
 CREATE TABLE IF NOT EXISTS agent_processed_matches (
     game_id TEXT NOT NULL,
@@ -171,6 +189,7 @@ ON CONFLICT (game_id) DO UPDATE SET
         game_id: &str,
     ) -> Result<SimulationState> {
         self.ensure_individual_agents(game_id).await?;
+        self.ensure_player_agents(game_id).await?;
         if let Some(state) = self.load_simulation_state(game_id).await? {
             return Ok(state);
         }
@@ -206,6 +225,66 @@ WHERE game_id = $1;
             .with_context(|| "count individual agent states")?;
 
         Ok(row.get(0))
+    }
+
+    pub async fn ensure_player_agents(&self, game_id: &str) -> Result<u64> {
+        let players = self.load_team_roster_players(game_id).await?;
+        let mut inserted = 0;
+
+        for player in players {
+            let state = default_player_agent_state(&player);
+            inserted += self.insert_player_agent_if_missing(&state).await?;
+        }
+
+        Ok(inserted)
+    }
+
+    pub async fn count_player_agents(&self, game_id: &str) -> Result<i64> {
+        let row = self
+            .client
+            .query_one(
+                "
+SELECT COUNT(*)
+FROM agent_player_states
+WHERE game_id = $1;
+",
+                &[&game_id],
+            )
+            .await
+            .with_context(|| "count player agent states")?;
+
+        Ok(row.get(0))
+    }
+
+    async fn load_team_roster_players(&self, game_id: &str) -> Result<Vec<TeamRosterPlayer>> {
+        let rows = self
+            .client
+            .query(
+                "
+SELECT player_id, game_id, full_name, position, overall_rating, roster_status
+FROM team_roster_players
+WHERE game_id = $1
+ORDER BY sort_order ASC;
+",
+                &[&game_id],
+            )
+            .await
+            .with_context(|| "load team roster players")?;
+
+        let mut players = Vec::with_capacity(rows.len());
+        for row in rows {
+            let overall_rating: i16 = row.get("overall_rating");
+            players.push(TeamRosterPlayer {
+                player_id: row.get("player_id"),
+                game_id: row.get("game_id"),
+                full_name: row.get("full_name"),
+                position: row.get("position"),
+                overall_rating: overall_rating as u8,
+                roster_status: row.get("roster_status"),
+            });
+        }
+
+        Ok(players)
     }
 
     async fn insert_individual_agent_if_missing(
@@ -260,11 +339,53 @@ ON CONFLICT (game_id, agent_id) DO NOTHING;
             .with_context(|| "insert individual agent state")
     }
 
+    async fn insert_player_agent_if_missing(&self, state: &PlayerAgentState) -> Result<u64> {
+        self.client
+            .execute(
+                "
+INSERT INTO agent_player_states (
+    game_id,
+    player_id,
+    full_name,
+    position,
+    emotional_state,
+    satisfaction,
+    loyalty,
+    ego,
+    competitive_drive,
+    city_connection,
+    last_match_id,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+ON CONFLICT (game_id, player_id) DO NOTHING;
+",
+                &[
+                    &state.game_id,
+                    &state.player_id,
+                    &state.full_name,
+                    &state.position,
+                    &state.emotional_state,
+                    &state.satisfaction,
+                    &state.loyalty,
+                    &state.ego,
+                    &state.competitive_drive,
+                    &state.city_connection,
+                    &state.last_match_id,
+                ],
+            )
+            .await
+            .with_context(|| "insert player agent state")
+    }
+
     pub async fn apply_match_finished(
         &mut self,
         event: &MatchFinishedEvent,
         occurred_at: String,
-    ) -> Result<Option<Vec<AgentStateChange>>> {
+    ) -> Result<Option<MatchAgentReactions>> {
+        self.ensure_player_agents(&event.meta.game_id).await?;
+
         let transaction = self
             .client
             .transaction()
@@ -301,13 +422,22 @@ ON CONFLICT (game_id, match_id) DO NOTHING;
         for change in &changes {
             save_core_agent_state(&transaction, &change.state).await?;
         }
+        let player_states = load_player_agent_states(&transaction, &event.meta.game_id).await?;
+        let (updated_player_states, roster_patch) =
+            apply_match_to_player_agents(player_states, event);
+        for state in &updated_player_states {
+            save_player_agent_state(&transaction, state).await?;
+        }
 
         transaction
             .commit()
             .await
             .with_context(|| "commit agent match reaction")?;
 
-        Ok(Some(changes))
+        Ok(Some(MatchAgentReactions {
+            core_agent_changes: changes,
+            roster_patch,
+        }))
     }
 }
 
@@ -380,6 +510,109 @@ ON CONFLICT (game_id, agent_id) DO UPDATE SET
         )
         .await
         .with_context(|| "save core agent state")?;
+
+    Ok(())
+}
+
+async fn load_player_agent_states(
+    transaction: &tokio_postgres::Transaction<'_>,
+    game_id: &str,
+) -> Result<Vec<PlayerAgentState>> {
+    let rows = transaction
+        .query(
+            "
+SELECT
+    game_id,
+    player_id,
+    full_name,
+    position,
+    emotional_state,
+    satisfaction,
+    loyalty,
+    ego,
+    competitive_drive,
+    city_connection,
+    last_match_id
+FROM agent_player_states
+WHERE game_id = $1
+ORDER BY player_id ASC;
+",
+            &[&game_id],
+        )
+        .await
+        .with_context(|| "load player agent states")?;
+
+    let mut states = Vec::with_capacity(rows.len());
+    for row in rows {
+        states.push(PlayerAgentState {
+            game_id: row.get("game_id"),
+            player_id: row.get("player_id"),
+            full_name: row.get("full_name"),
+            position: row.get("position"),
+            emotional_state: row.get("emotional_state"),
+            satisfaction: row.get("satisfaction"),
+            loyalty: row.get("loyalty"),
+            ego: row.get("ego"),
+            competitive_drive: row.get("competitive_drive"),
+            city_connection: row.get("city_connection"),
+            last_match_id: row.get("last_match_id"),
+        });
+    }
+
+    Ok(states)
+}
+
+async fn save_player_agent_state(
+    transaction: &tokio_postgres::Transaction<'_>,
+    state: &PlayerAgentState,
+) -> Result<()> {
+    transaction
+        .execute(
+            "
+INSERT INTO agent_player_states (
+    game_id,
+    player_id,
+    full_name,
+    position,
+    emotional_state,
+    satisfaction,
+    loyalty,
+    ego,
+    competitive_drive,
+    city_connection,
+    last_match_id,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+ON CONFLICT (game_id, player_id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    position = EXCLUDED.position,
+    emotional_state = EXCLUDED.emotional_state,
+    satisfaction = EXCLUDED.satisfaction,
+    loyalty = EXCLUDED.loyalty,
+    ego = EXCLUDED.ego,
+    competitive_drive = EXCLUDED.competitive_drive,
+    city_connection = EXCLUDED.city_connection,
+    last_match_id = EXCLUDED.last_match_id,
+    updated_at = NOW();
+",
+            &[
+                &state.game_id,
+                &state.player_id,
+                &state.full_name,
+                &state.position,
+                &state.emotional_state,
+                &state.satisfaction,
+                &state.loyalty,
+                &state.ego,
+                &state.competitive_drive,
+                &state.city_connection,
+                &state.last_match_id,
+            ],
+        )
+        .await
+        .with_context(|| "save player agent state")?;
 
     Ok(())
 }

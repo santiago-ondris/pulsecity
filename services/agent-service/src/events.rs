@@ -11,6 +11,7 @@ pub const SUBJECT_MAP_GENERATION_STARTED: &str = "mapa.generacion_iniciada";
 pub const SUBJECT_MATCH_FINISHED: &str = "partido.terminado";
 pub const SUBJECT_AGENT_STATE_CHANGED: &str = "agente.estado_cambio";
 pub const SUBJECT_AGENT_CRITICAL_EVENT: &str = "agente.evento_critico";
+pub const SUBJECT_ROSTER_PATCH: &str = "roster.patch";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventMeta {
@@ -79,6 +80,21 @@ pub struct MatchFinishedEvent {
     pub away_score: u16,
     pub winner_team_id: String,
     pub seed: u64,
+    #[serde(default)]
+    pub box_score: Vec<PlayerBoxScore>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerBoxScore {
+    pub player_id: String,
+    pub team_id: String,
+    pub minutes: u8,
+    pub points: u16,
+    pub rebounds: u16,
+    pub assists: u16,
+    pub steals: u16,
+    pub blocks: u16,
+    pub turnovers: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,6 +114,35 @@ pub struct AgentStateChangedEvent {
     pub source_subject: String,
     pub mood: String,
     pub state: BTreeMap<String, f64>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RosterPatchEnvelope {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub subject: String,
+    pub game_id: String,
+    pub patch: RosterStatePatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RosterStatePatch {
+    pub simulated_date: String,
+    pub source_event_id: String,
+    pub source_subject: String,
+    pub players: Vec<PlayerEmotionalPatch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlayerEmotionalPatch {
+    pub player_id: String,
+    pub emotional_state: String,
+    pub satisfaction: f64,
+    pub loyalty: f64,
+    pub ego: f64,
+    pub competitive_drive: f64,
+    pub city_connection: f64,
     pub summary: String,
 }
 

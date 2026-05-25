@@ -159,6 +159,34 @@ export interface AgentPatchEnvelope {
   patch: AgentStatePatch;
 }
 
+export interface PlayerEmotionalState {
+  player_id: string;
+  emotional_state: string;
+  satisfaction: number;
+  loyalty: number;
+  ego: number;
+  competitive_drive: number;
+  city_connection: number;
+  summary: string;
+  simulated_date?: string;
+  source_event_id?: string;
+  source_subject?: string;
+}
+
+export type RosterClientStates = Record<string, PlayerEmotionalState>;
+
+export interface RosterPatchEnvelope {
+  type: "roster.patch";
+  subject: string;
+  game_id: string;
+  patch: {
+    simulated_date: string;
+    source_event_id: string;
+    source_subject: string;
+    players: PlayerEmotionalState[];
+  };
+}
+
 export interface NarrativeChoice {
   id: string;
   label: string;
@@ -196,6 +224,7 @@ export type RealtimeEvent =
   | SeasonPatchEnvelope
   | CityPatchEnvelope
   | AgentPatchEnvelope
+  | RosterPatchEnvelope
   | NarrativeEvent
   | NarrativeResponseEvent;
 

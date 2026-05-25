@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::events::{
-    AgentStateChangedEvent, EventMeta, MatchFinishedEvent, SUBJECT_MATCH_FINISHED,
+    AgentStateChangedEvent, EventMeta, MatchFinishedEvent, PlayerBoxScore, PlayerEmotionalPatch,
+    RosterPatchEnvelope, RosterStatePatch, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
 };
 
 pub const OWN_TEAM_ID: &str = "pulsecity";
@@ -32,6 +33,37 @@ pub struct CoreAgentState {
 pub struct AgentStateChange {
     pub state: CoreAgentState,
     pub event: AgentStateChangedEvent,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TeamRosterPlayer {
+    pub player_id: String,
+    pub game_id: String,
+    pub full_name: String,
+    pub position: String,
+    pub overall_rating: u8,
+    pub roster_status: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlayerAgentState {
+    pub game_id: String,
+    pub player_id: String,
+    pub full_name: String,
+    pub position: String,
+    pub emotional_state: String,
+    pub satisfaction: f64,
+    pub loyalty: f64,
+    pub ego: f64,
+    pub competitive_drive: f64,
+    pub city_connection: f64,
+    pub last_match_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchAgentReactions {
+    pub core_agent_changes: Vec<AgentStateChange>,
+    pub roster_patch: Option<RosterPatchEnvelope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,6 +105,29 @@ pub fn default_individual_agent_states(game_id: &str) -> Vec<IndividualAgentStat
         .into_iter()
         .map(|template| template.into_state(game_id))
         .collect()
+}
+
+#[must_use]
+pub fn default_player_agent_state(player: &TeamRosterPlayer) -> PlayerAgentState {
+    let rating_factor = (f64::from(player.overall_rating).clamp(60.0, 90.0) - 60.0) / 30.0;
+    let ego = match player.position.as_str() {
+        "PG" | "SG" | "SF" => 0.42 + rating_factor * 0.24,
+        _ => 0.34 + rating_factor * 0.20,
+    };
+
+    PlayerAgentState {
+        game_id: player.game_id.clone(),
+        player_id: player.player_id.clone(),
+        full_name: player.full_name.clone(),
+        position: player.position.clone(),
+        emotional_state: "steady".to_string(),
+        satisfaction: 0.04,
+        loyalty: 0.62,
+        ego: clamp_unit(ego),
+        competitive_drive: clamp_unit(0.58 + rating_factor * 0.22),
+        city_connection: 0.35,
+        last_match_id: None,
+    }
 }
 
 #[must_use]
@@ -939,6 +994,53 @@ pub fn apply_match_finished(
         .collect()
 }
 
+#[must_use]
+pub fn apply_match_to_player_agents(
+    current_states: Vec<PlayerAgentState>,
+    event: &MatchFinishedEvent,
+) -> (Vec<PlayerAgentState>, Option<RosterPatchEnvelope>) {
+    if current_states.is_empty() {
+        return (Vec::new(), None);
+    }
+
+    let context = MatchContext::from_event(event);
+    let mut next_states = Vec::with_capacity(current_states.len());
+    let mut patches = Vec::with_capacity(current_states.len());
+
+    for mut state in current_states {
+        let line = event
+            .box_score
+            .iter()
+            .find(|line| line.player_id == state.player_id && line.team_id == OWN_TEAM_ID);
+        let Some(line) = line else {
+            next_states.push(state);
+            continue;
+        };
+
+        apply_box_score_to_player(&mut state, line, &context, &event.match_id);
+        patches.push(player_patch(&state, line, &context));
+        next_states.push(state);
+    }
+
+    let roster_patch = if patches.is_empty() {
+        None
+    } else {
+        Some(RosterPatchEnvelope {
+            event_type: SUBJECT_ROSTER_PATCH.to_string(),
+            subject: SUBJECT_ROSTER_PATCH.to_string(),
+            game_id: event.meta.game_id.clone(),
+            patch: RosterStatePatch {
+                simulated_date: event.simulated_date.clone(),
+                source_event_id: event.meta.event_id.clone(),
+                source_subject: SUBJECT_MATCH_FINISHED.to_string(),
+                players: patches,
+            },
+        })
+    };
+
+    (next_states, roster_patch)
+}
+
 fn apply_match_to_agent(
     mut state: CoreAgentState,
     event: &MatchFinishedEvent,
@@ -1136,6 +1238,94 @@ fn apply_sports_psychologist(state: &mut CoreAgentState, context: &MatchContext)
     .to_string();
 }
 
+fn apply_box_score_to_player(
+    state: &mut PlayerAgentState,
+    line: &PlayerBoxScore,
+    context: &MatchContext,
+    match_id: &str,
+) {
+    let performance = player_performance_index(line);
+    let result_delta = if context.won { 1.0 } else { -1.0 };
+    let role_pressure = if line.minutes >= 28 { 0.018 } else { -0.01 };
+
+    state.satisfaction = clamp(adjusted(
+        state.satisfaction,
+        0.035 * result_delta + performance * 0.035,
+    ));
+    state.loyalty = clamp_unit(state.loyalty + 0.012 * result_delta + performance * 0.01);
+    state.ego = clamp_unit(state.ego + performance * 0.035 + role_pressure);
+    state.competitive_drive =
+        clamp_unit(state.competitive_drive + if context.won { 0.008 } else { 0.02 });
+    state.city_connection = clamp_unit(
+        state.city_connection
+            + if context.home_game && context.won {
+                0.018
+            } else {
+                0.004
+            },
+    );
+    state.last_match_id = Some(match_id.to_string());
+
+    state.emotional_state = if !context.won && performance < -0.35 {
+        "frustrated"
+    } else if !context.won {
+        "restless"
+    } else if performance > 0.40 {
+        "confident"
+    } else {
+        "steady"
+    }
+    .to_string();
+}
+
+fn player_patch(
+    state: &PlayerAgentState,
+    line: &PlayerBoxScore,
+    context: &MatchContext,
+) -> PlayerEmotionalPatch {
+    PlayerEmotionalPatch {
+        player_id: state.player_id.clone(),
+        emotional_state: state.emotional_state.clone(),
+        satisfaction: state.satisfaction,
+        loyalty: state.loyalty,
+        ego: state.ego,
+        competitive_drive: state.competitive_drive,
+        city_connection: state.city_connection,
+        summary: summarize_player_change(state, line, context),
+    }
+}
+
+fn summarize_player_change(
+    state: &PlayerAgentState,
+    line: &PlayerBoxScore,
+    context: &MatchContext,
+) -> String {
+    let result = if context.won { "victoria" } else { "derrota" };
+    let role = if line.minutes >= 28 {
+        "rol alto"
+    } else if line.minutes >= 16 {
+        "rotacion estable"
+    } else {
+        "minutos limitados"
+    };
+
+    format!(
+        "{} procesa la {} con {} y {} puntos.",
+        state.full_name, result, role, line.points
+    )
+}
+
+fn player_performance_index(line: &PlayerBoxScore) -> f64 {
+    let production = f64::from(line.points) * 0.04
+        + f64::from(line.rebounds) * 0.025
+        + f64::from(line.assists) * 0.03
+        + f64::from(line.steals + line.blocks) * 0.04
+        - f64::from(line.turnovers) * 0.04;
+    let minutes_expectation = f64::from(line.minutes) * 0.018;
+
+    (production - minutes_expectation).clamp(-1.0, 1.0)
+}
+
 fn summarize_agent_change(agent_id: &str, context: &MatchContext) -> String {
     let result = if context.won { "victoria" } else { "derrota" };
     let venue = if context.home_game {
@@ -1169,7 +1359,11 @@ fn summarize_agent_change(agent_id: &str, context: &MatchContext) -> String {
 
 fn adjust(state: &mut BTreeMap<String, f64>, key: &str, delta: f64) {
     let current = metric(state, key);
-    state.insert(key.to_string(), clamp(current + delta));
+    state.insert(key.to_string(), adjusted(current, delta));
+}
+
+fn adjusted(current: f64, delta: f64) -> f64 {
+    clamp(current + delta)
 }
 
 fn metric(state: &BTreeMap<String, f64>, key: &str) -> f64 {
@@ -1178,6 +1372,10 @@ fn metric(state: &BTreeMap<String, f64>, key: &str) -> f64 {
 
 fn clamp(value: f64) -> f64 {
     value.clamp(MIN_STATE_VALUE, MAX_STATE_VALUE)
+}
+
+fn clamp_unit(value: f64) -> f64 {
+    value.clamp(0.0, 1.0)
 }
 
 fn map_from_pairs(pairs: &[(&str, f64)]) -> BTreeMap<String, f64> {
@@ -1290,6 +1488,47 @@ mod tests {
     }
 
     #[test]
+    fn default_player_agent_state_uses_team_player_id() {
+        let player = sample_roster_player("game-1-player-01", 82, "PG");
+        let state = default_player_agent_state(&player);
+
+        assert_eq!(state.player_id, "game-1-player-01");
+        assert_eq!(state.game_id, "game-1");
+        assert_eq!(state.full_name, "Mateo Cross");
+        assert!((0.0..=1.0).contains(&state.ego));
+        assert!((0.0..=1.0).contains(&state.competitive_drive));
+    }
+
+    #[test]
+    fn player_agents_react_to_box_score_with_roster_patch() {
+        let mut event = sample_match(true, 112, 101);
+        event.box_score = vec![PlayerBoxScore {
+            player_id: "game-1-player-01".to_string(),
+            team_id: OWN_TEAM_ID.to_string(),
+            minutes: 32,
+            points: 26,
+            rebounds: 6,
+            assists: 8,
+            steals: 1,
+            blocks: 0,
+            turnovers: 2,
+        }];
+        let initial =
+            default_player_agent_state(&sample_roster_player("game-1-player-01", 82, "PG"));
+
+        let (states, patch) = apply_match_to_player_agents(vec![initial], &event);
+
+        assert_eq!(states.len(), 1);
+        assert_eq!(states[0].last_match_id.as_deref(), Some("match-1"));
+        assert!(states[0].satisfaction > 0.04);
+
+        let patch = patch.expect("roster patch exists");
+        assert_eq!(patch.event_type, SUBJECT_ROSTER_PATCH);
+        assert_eq!(patch.patch.players.len(), 1);
+        assert_eq!(patch.patch.players[0].player_id, "game-1-player-01");
+    }
+
+    #[test]
     fn win_improves_owner_and_reduces_coach_pressure() {
         let event = sample_match(true, 112, 101);
         let changes = apply_match_finished(
@@ -1390,6 +1629,22 @@ mod tests {
             away_score,
             winner_team_id: winner_team_id.to_string(),
             seed: 123,
+            box_score: Vec::new(),
+        }
+    }
+
+    fn sample_roster_player(
+        player_id: &str,
+        overall_rating: u8,
+        position: &str,
+    ) -> TeamRosterPlayer {
+        TeamRosterPlayer {
+            player_id: player_id.to_string(),
+            game_id: "game-1".to_string(),
+            full_name: "Mateo Cross".to_string(),
+            position: position.to_string(),
+            overall_rating,
+            roster_status: "active".to_string(),
         }
     }
 }

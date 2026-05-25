@@ -164,6 +164,7 @@ const (
 	SubjectCityPatchDelta     = "city.patch"
 	SubjectAgentStateChanged  = "agente.estado_cambio"
 	SubjectAgentPatchDelta    = "agent.patch"
+	SubjectRosterPatchDelta   = "roster.patch"
 )
 
 type EventMeta struct {
@@ -290,6 +291,31 @@ type AgentStatePatch struct {
 	SimulatedDate string             `json:"simulated_date"`
 	SourceEventID string             `json:"source_event_id"`
 	SourceSubject string             `json:"source_subject"`
+}
+
+type RosterPatchEnvelope struct {
+	Type    string           `json:"type"`
+	Subject string           `json:"subject"`
+	GameID  string           `json:"game_id"`
+	Patch   RosterStatePatch `json:"patch"`
+}
+
+type RosterStatePatch struct {
+	SimulatedDate string                 `json:"simulated_date"`
+	SourceEventID string                 `json:"source_event_id"`
+	SourceSubject string                 `json:"source_subject"`
+	Players       []PlayerEmotionalPatch `json:"players"`
+}
+
+type PlayerEmotionalPatch struct {
+	PlayerID         string  `json:"player_id"`
+	EmotionalState   string  `json:"emotional_state"`
+	Satisfaction     float64 `json:"satisfaction"`
+	Loyalty          float64 `json:"loyalty"`
+	Ego              float64 `json:"ego"`
+	CompetitiveDrive float64 `json:"competitive_drive"`
+	CityConnection   float64 `json:"city_connection"`
+	Summary          string  `json:"summary"`
 }
 
 func AgentPatchFromStateChanged(event AgentStateChangedEvent) AgentPatchEnvelope {

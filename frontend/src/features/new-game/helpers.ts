@@ -102,6 +102,10 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return event.patch.summary ?? `${event.agent_id} actualizo su estado`;
   }
 
+  if (event.type === "roster.patch") {
+    return `${event.patch.players.length} jugadores actualizaron su estado emocional`;
+  }
+
   return event.patch.message ?? "Patch recibido";
 }
 
