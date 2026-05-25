@@ -1,4 +1,4 @@
-.PHONY: up down build test logs run-agent-service run-analytics-service run-city-service run-gateway run-map-service run-match-service run-narrative-service run-team-service run-frontend
+.PHONY: up down build test logs run-agent-service run-analytics-service run-city-service run-gateway run-map-service run-match-service run-narrative-service run-team-service run-frontend dev-app
 
 # Servicios
 up:
@@ -81,3 +81,22 @@ nats-tiempo:
 # Dev — levanta todo y muestra logs
 dev: up
 	docker compose logs -f
+
+# Dev app — levanta infra + servicios de app para probar desde el browser.
+dev-app: up
+	@echo "PulseCity dev app"
+	@echo "Gateway:  http://localhost:8080"
+	@echo "Frontend: http://localhost:5173"
+	@echo "Postgres: localhost:5433"
+	@echo "NATS:     localhost:4222"
+	@trap 'for pid in $$(jobs -p); do kill $$pid; done' INT TERM EXIT; \
+	$(MAKE) run-gateway & \
+	$(MAKE) run-map-service & \
+	$(MAKE) run-agent-service & \
+	$(MAKE) run-team-service & \
+	$(MAKE) run-match-service & \
+	$(MAKE) run-city-service & \
+	$(MAKE) run-narrative-service & \
+	$(MAKE) run-analytics-service & \
+	$(MAKE) run-frontend & \
+	wait

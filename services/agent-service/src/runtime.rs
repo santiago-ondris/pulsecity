@@ -1,4 +1,7 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{Context, Result};
 use async_nats::Client;
@@ -20,7 +23,130 @@ use crate::{
 const TICK_INTERVAL: Duration = Duration::from_millis(100);
 const SCHEMA_VERSION: u16 = 1;
 
-pub async fn run(client: Client, mut store: Store, mut state: SimulationState) -> Result<()> {
+struct ActiveSimulation {
+    state: SimulationState,
+    accumulator: SimulationAccumulator,
+}
+
+impl ActiveSimulation {
+    fn new(state: SimulationState) -> Self {
+        Self {
+            state,
+            accumulator: SimulationAccumulator::new(),
+        }
+    }
+}
+
+pub async fn run(client: Client, mut store: Store) -> Result<()> {
+    let mut session_started = client
+        .subscribe(SUBJECT_TIME_SESSION_STARTED)
+        .await
+        .context("subscribe tiempo.sesion_iniciada")?;
+    let mut session_ended = client
+        .subscribe(SUBJECT_TIME_SESSION_ENDED)
+        .await
+        .context("subscribe tiempo.sesion_terminada")?;
+    let mut speed_changed = client
+        .subscribe(SUBJECT_TIME_SPEED_CHANGED)
+        .await
+        .context("subscribe tiempo.velocidad_cambiada")?;
+    let mut pause_changed = client
+        .subscribe(SUBJECT_TIME_PAUSE_CHANGED)
+        .await
+        .context("subscribe tiempo.pausa_activada")?;
+    let mut match_finished = client
+        .subscribe(SUBJECT_MATCH_FINISHED)
+        .await
+        .context("subscribe partido.terminado")?;
+
+    let mut ticker = interval(TICK_INTERVAL);
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut active_simulations: BTreeMap<String, ActiveSimulation> = BTreeMap::new();
+
+    info!("dynamic simulation supervisor started");
+
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                info!("shutdown signal received");
+                break;
+            }
+            _ = ticker.tick() => {
+                for simulation in active_simulations.values_mut() {
+                    process_tick(&client, &store, &mut simulation.state, &mut simulation.accumulator).await?;
+                }
+            }
+            Some(message) = session_started.next() => {
+                let event = match decode_event::<SessionStartedEvent>(SUBJECT_TIME_SESSION_STARTED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                let simulation = load_or_initialize_active_simulation(&store, &mut active_simulations, &event.meta.game_id).await?;
+                simulation.state.set_session_active(true);
+                store.save_simulation_state(&simulation.state).await?;
+                info!(game_id = %simulation.state.game_id, session_id = %event.session_id, "simulation session activated");
+            }
+            Some(message) = session_ended.next() => {
+                let event = match decode_event::<SessionEndedEvent>(SUBJECT_TIME_SESSION_ENDED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                let simulation = load_or_initialize_active_simulation(&store, &mut active_simulations, &event.meta.game_id).await?;
+                simulation.state.set_session_active(false);
+                simulation.accumulator.reset();
+                store.save_simulation_state(&simulation.state).await?;
+                info!(game_id = %simulation.state.game_id, session_id = %event.session_id, "simulation session deactivated");
+            }
+            Some(message) = speed_changed.next() => {
+                let event = match decode_event::<SpeedChangedEvent>(SUBJECT_TIME_SPEED_CHANGED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                let simulation = load_or_initialize_active_simulation(&store, &mut active_simulations, &event.meta.game_id).await?;
+                if let Err(err) = simulation.state.set_speed(event.speed) {
+                    warn!(game_id = %simulation.state.game_id, speed = event.speed, error = %err, "ignoring invalid simulation speed");
+                    continue;
+                }
+
+                store.save_simulation_state(&simulation.state).await?;
+                info!(game_id = %simulation.state.game_id, speed = simulation.state.speed, "simulation speed changed");
+            }
+            Some(message) = pause_changed.next() => {
+                let event = match decode_event::<PauseChangedEvent>(SUBJECT_TIME_PAUSE_CHANGED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                let simulation = load_or_initialize_active_simulation(&store, &mut active_simulations, &event.meta.game_id).await?;
+                simulation.state.set_paused(event.paused);
+                if simulation.state.paused {
+                    simulation.accumulator.reset();
+                }
+                store.save_simulation_state(&simulation.state).await?;
+                info!(game_id = %simulation.state.game_id, paused = simulation.state.paused, "simulation pause changed");
+            }
+            Some(message) = match_finished.next() => {
+                let event = match decode_event::<MatchFinishedEvent>(SUBJECT_MATCH_FINISHED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                process_match_finished(&client, &mut store, event).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn run_for_game(
+    client: Client,
+    mut store: Store,
+    mut state: SimulationState,
+) -> Result<()> {
     let mut session_started = client
         .subscribe(SUBJECT_TIME_SESSION_STARTED)
         .await
@@ -135,6 +261,29 @@ pub async fn run(client: Client, mut store: Store, mut state: SimulationState) -
     }
 
     Ok(())
+}
+
+async fn load_or_initialize_active_simulation<'a>(
+    store: &Store,
+    active_simulations: &'a mut BTreeMap<String, ActiveSimulation>,
+    game_id: &str,
+) -> Result<&'a mut ActiveSimulation> {
+    if !active_simulations.contains_key(game_id) {
+        let state = store.load_or_initialize_simulation_state(game_id).await?;
+        info!(
+            game_id = %state.game_id,
+            simulated_date = %state.current_simulated_date,
+            speed = state.speed,
+            paused = state.paused,
+            session_active = state.session_active,
+            "simulation state loaded"
+        );
+        active_simulations.insert(game_id.to_string(), ActiveSimulation::new(state));
+    }
+
+    Ok(active_simulations
+        .get_mut(game_id)
+        .expect("active simulation was inserted"))
 }
 
 async fn process_match_finished(

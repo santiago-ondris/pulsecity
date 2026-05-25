@@ -22,23 +22,31 @@ async fn main() -> anyhow::Result<()> {
     let store = Store::connect(&database_url).await?;
     store.ensure_schema().await?;
 
-    let game_id = game_id_from_env();
-    let state = store.load_or_initialize_simulation_state(&game_id).await?;
-
     info!(service = SERVICE_NAME, nats_url, "connected to nats");
-    info!(
-        service = SERVICE_NAME,
-        game_id = %state.game_id,
-        simulated_date = %state.current_simulated_date,
-        speed = state.speed,
-        paused = state.paused,
-        session_active = state.session_active,
-        "simulation state loaded"
-    );
 
-    runtime::run(client.clone(), store, state)
-        .await
-        .context("run simulation loop")?;
+    if let Some(game_id) = game_id_from_env() {
+        let state = store.load_or_initialize_simulation_state(&game_id).await?;
+        info!(
+            service = SERVICE_NAME,
+            game_id = %state.game_id,
+            simulated_date = %state.current_simulated_date,
+            speed = state.speed,
+            paused = state.paused,
+            session_active = state.session_active,
+            "simulation state loaded from GAME_ID"
+        );
+        runtime::run_for_game(client.clone(), store, state)
+            .await
+            .context("run simulation loop")?;
+    } else {
+        info!(
+            service = SERVICE_NAME,
+            "starting dynamic simulation supervisor; active games are selected by tiempo.sesion_iniciada"
+        );
+        runtime::run(client.clone(), store)
+            .await
+            .context("run simulation supervisor")?;
+    }
 
     drop(client);
     Ok(())

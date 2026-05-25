@@ -22,8 +22,10 @@ pub fn database_url_from_env() -> String {
 }
 
 #[must_use]
-pub fn game_id_from_env() -> String {
-    std::env::var("GAME_ID").unwrap_or_else(|_| "local-dev".to_string())
+pub fn game_id_from_env() -> Option<String> {
+    std::env::var("GAME_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
 }
 
 #[cfg(test)]
