@@ -11,10 +11,11 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     events::{
-        DayAdvancedEvent, EventMeta, MatchFinishedEvent, PauseChangedEvent,
-        SUBJECT_AGENT_STATE_CHANGED, SUBJECT_MATCH_FINISHED, SUBJECT_TIME_DAY_ADVANCED,
-        SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED,
-        SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
+        DayAdvancedEvent, EventMeta, MapGenerationStartedEvent, MatchFinishedEvent,
+        PauseChangedEvent, SUBJECT_AGENT_STATE_CHANGED, SUBJECT_MAP_GENERATION_STARTED,
+        SUBJECT_MATCH_FINISHED, SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED,
+        SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED,
+        SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
     },
     persistence::Store,
     simulation::{SimulationAccumulator, SimulationState, advance_simulated_date},
@@ -58,6 +59,10 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
         .subscribe(SUBJECT_MATCH_FINISHED)
         .await
         .context("subscribe partido.terminado")?;
+    let mut map_generation_started = client
+        .subscribe(SUBJECT_MAP_GENERATION_STARTED)
+        .await
+        .context("subscribe mapa.generacion_iniciada")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -136,6 +141,14 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
 
                 process_match_finished(&client, &mut store, event).await?;
             }
+            Some(message) = map_generation_started.next() => {
+                let event = match decode_event::<MapGenerationStartedEvent>(SUBJECT_MAP_GENERATION_STARTED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                process_map_generation_started(&store, &event).await?;
+            }
         }
     }
 
@@ -167,6 +180,10 @@ pub async fn run_for_game(
         .subscribe(SUBJECT_MATCH_FINISHED)
         .await
         .context("subscribe partido.terminado")?;
+    let mut map_generation_started = client
+        .subscribe(SUBJECT_MAP_GENERATION_STARTED)
+        .await
+        .context("subscribe mapa.generacion_iniciada")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -257,6 +274,17 @@ pub async fn run_for_game(
 
                 process_match_finished(&client, &mut store, event).await?;
             }
+            Some(message) = map_generation_started.next() => {
+                let event = match decode_event::<MapGenerationStartedEvent>(SUBJECT_MAP_GENERATION_STARTED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+                if event.game_id != state.game_id {
+                    continue;
+                }
+
+                process_map_generation_started(&store, &event).await?;
+            }
         }
     }
 
@@ -284,6 +312,29 @@ async fn load_or_initialize_active_simulation<'a>(
     Ok(active_simulations
         .get_mut(game_id)
         .expect("active simulation was inserted"))
+}
+
+async fn process_map_generation_started(
+    store: &Store,
+    event: &MapGenerationStartedEvent,
+) -> Result<()> {
+    let inserted = store
+        .ensure_individual_agents(&event.game_id)
+        .await
+        .with_context(|| format!("seed individual agents game={}", event.game_id))?;
+    let total = store
+        .count_individual_agents(&event.game_id)
+        .await
+        .with_context(|| format!("count individual agents game={}", event.game_id))?;
+
+    info!(
+        game_id = %event.game_id,
+        inserted,
+        total,
+        "individual agents ready"
+    );
+
+    Ok(())
 }
 
 async fn process_match_finished(

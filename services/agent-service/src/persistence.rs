@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use tokio_postgres::{Client, NoTls};
 
 use crate::{
-    agents::{AgentStateChange, CoreAgentState, apply_match_finished, default_core_agent_state},
+    agents::{
+        AgentStateChange, CoreAgentState, IndividualAgentState, apply_match_finished,
+        default_core_agent_state, default_individual_agent_states,
+    },
     events::MatchFinishedEvent,
     simulation::SimulationState,
 };
@@ -51,6 +54,28 @@ CREATE TABLE IF NOT EXISTS agent_core_states (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (game_id, agent_id)
 );
+
+CREATE TABLE IF NOT EXISTS agent_individual_states (
+    game_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    role TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    emotional_state TEXT NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL,
+    satisfaction DOUBLE PRECISION NOT NULL,
+    loyalty DOUBLE PRECISION NOT NULL,
+    role_performance DOUBLE PRECISION NOT NULL,
+    state_json TEXT NOT NULL,
+    agenda_json TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_individual_states_game_category
+ON agent_individual_states (game_id, category);
 
 CREATE TABLE IF NOT EXISTS agent_processed_matches (
     game_id TEXT NOT NULL,
@@ -145,6 +170,7 @@ ON CONFLICT (game_id) DO UPDATE SET
         &self,
         game_id: &str,
     ) -> Result<SimulationState> {
+        self.ensure_individual_agents(game_id).await?;
         if let Some(state) = self.load_simulation_state(game_id).await? {
             return Ok(state);
         }
@@ -152,6 +178,86 @@ ON CONFLICT (game_id) DO UPDATE SET
         let state = SimulationState::new(game_id);
         self.save_simulation_state(&state).await?;
         Ok(state)
+    }
+
+    pub async fn ensure_individual_agents(&self, game_id: &str) -> Result<u64> {
+        let agents = default_individual_agent_states(game_id);
+        let mut inserted = 0;
+
+        for agent in agents {
+            inserted += self.insert_individual_agent_if_missing(&agent).await?;
+        }
+
+        Ok(inserted)
+    }
+
+    pub async fn count_individual_agents(&self, game_id: &str) -> Result<i64> {
+        let row = self
+            .client
+            .query_one(
+                "
+SELECT COUNT(*)
+FROM agent_individual_states
+WHERE game_id = $1;
+",
+                &[&game_id],
+            )
+            .await
+            .with_context(|| "count individual agent states")?;
+
+        Ok(row.get(0))
+    }
+
+    async fn insert_individual_agent_if_missing(
+        &self,
+        agent: &IndividualAgentState,
+    ) -> Result<u64> {
+        let state_json =
+            serde_json::to_string(&agent.state).with_context(|| "encode individual state json")?;
+        let agenda_json = serde_json::to_string(&agent.agenda)
+            .with_context(|| "encode individual agenda json")?;
+
+        self.client
+            .execute(
+                "
+INSERT INTO agent_individual_states (
+    game_id,
+    agent_id,
+    display_name,
+    category,
+    role,
+    domain,
+    emotional_state,
+    confidence,
+    satisfaction,
+    loyalty,
+    role_performance,
+    state_json,
+    agenda_json,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+ON CONFLICT (game_id, agent_id) DO NOTHING;
+",
+                &[
+                    &agent.game_id,
+                    &agent.agent_id,
+                    &agent.display_name,
+                    &agent.category,
+                    &agent.role,
+                    &agent.domain,
+                    &agent.emotional_state,
+                    &agent.confidence,
+                    &agent.satisfaction,
+                    &agent.loyalty,
+                    &agent.role_performance,
+                    &state_json,
+                    &agenda_json,
+                ],
+            )
+            .await
+            .with_context(|| "insert individual agent state")
     }
 
     pub async fn apply_match_finished(

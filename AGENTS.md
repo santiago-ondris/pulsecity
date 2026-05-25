@@ -23,7 +23,7 @@ En cada sesion de Codeo, establecer mini milestones a conseguir en esa sesion, p
 Recordar que vengo del mundo REST comun y este es mi primer proyecto tan grande y complejo, asi que ser explicativo siempre como tambien necesito de tus recomendaciones, para instalar una dependencia, usar algo nuevo, usar una tecnologia quizas no propuesta como gRPC por ejemplo, lo que sea, y mantener una estructura de carpetas ordenada siempre. 
 Siempre que necesitemos hacer algo visual, revisar dentro de docs/00_start_here/pulsecity_designsystem.md. Alli se encuentran todos los lineamientos de estilos de la app.
 Cuando hayan dudas de PulseCity, leer todo el canon que se encuentra en docs/01_Canon, ahi esta toda la informacion plasmada y dividida en archivos sobre lo distinto que fui pensando sobre la app.
-Actualmente estamos trabajando en el MILESTONE 2, por ende siempre antes de empezar algo, leer el archivo INICIOM2.MD ya que ahi esta toda la info detallada del MILESTONE 2, y tambien por donde voy, que tengo hecho, por donde seguir, etc. Ademas, en consecuencia, siempre actualizar ese archivo al finalizar cada sesion, es decir, si hacemos el mini milestone md.11 dejarlo escrito como: YA REALIZADO.
+Actualmente estamos trabajando en el MILESTONE 3, por ende siempre antes de empezar algo, leer el archivo INICIOM3.MD ya que ahi esta toda la info detallada del MILESTONE 3, y tambien por donde voy, que tengo hecho, por donde seguir, etc. Ademas, en consecuencia, siempre actualizar ese archivo al finalizar cada sesion, es decir, si hacemos el mini milestone md.11 dejarlo escrito como: YA REALIZADO.
 
 ## Sobre Obsidian y las notas
 

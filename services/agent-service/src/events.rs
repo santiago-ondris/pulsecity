@@ -7,6 +7,7 @@ pub const SUBJECT_TIME_SESSION_ENDED: &str = "tiempo.sesion_terminada";
 pub const SUBJECT_TIME_SPEED_CHANGED: &str = "tiempo.velocidad_cambiada";
 pub const SUBJECT_TIME_PAUSE_CHANGED: &str = "tiempo.pausa_activada";
 pub const SUBJECT_TIME_DAY_ADVANCED: &str = "tiempo.dia_avanzado";
+pub const SUBJECT_MAP_GENERATION_STARTED: &str = "mapa.generacion_iniciada";
 pub const SUBJECT_MATCH_FINISHED: &str = "partido.terminado";
 pub const SUBJECT_AGENT_STATE_CHANGED: &str = "agente.estado_cambio";
 pub const SUBJECT_AGENT_CRITICAL_EVENT: &str = "agente.evento_critico";
@@ -56,6 +57,14 @@ pub struct DayAdvancedEvent {
     pub simulated_date: String,
     pub speed: u8,
     pub days_processed: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MapGenerationStartedEvent {
+    pub game_id: String,
+    pub city_name: String,
+    #[serde(default)]
+    pub seed: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
