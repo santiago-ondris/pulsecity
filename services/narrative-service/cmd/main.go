@@ -59,7 +59,24 @@ func main() {
 		log.Fatalf("subscribe match finished events: %v", err)
 	}
 
-	log.Printf("narrative-service listening on %s and %s", domain.SubjectNarrativeOwnerIntroRequested, domain.SubjectMatchFinished)
+	if _, err := bus.Subscribe(domain.SubjectAgentConsultationStarted, func(_ string, data []byte) {
+		var event domain.AgentConsultationStartedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode agent consultation: %v", err)
+			return
+		}
+
+		go processAgentConsultation(bus, store, event)
+	}); err != nil {
+		log.Fatalf("subscribe agent consultation events: %v", err)
+	}
+
+	log.Printf(
+		"narrative-service listening on %s, %s and %s",
+		domain.SubjectNarrativeOwnerIntroRequested,
+		domain.SubjectMatchFinished,
+		domain.SubjectAgentConsultationStarted,
+	)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -112,6 +129,38 @@ func processMatchFinished(bus *natsclient.Client, store *persistence.Store, matc
 
 	if err := bus.PublishJSON(domain.SubjectNarrativeEventGenerated, event); err != nil {
 		log.Printf("publish post-match narrative game=%s match=%s: %v", match.GameID, match.MatchID, err)
+	}
+}
+
+func processAgentConsultation(bus *natsclient.Client, store *persistence.Store, event domain.AgentConsultationStartedEvent) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	chatContext, err := store.LoadAgentChatContext(ctx, event.GameID, event.AgentID)
+	if err != nil {
+		log.Printf("load agent chat context game=%s agent=%s: %v", event.GameID, event.AgentID, err)
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	userMessage := domain.BuildUserChatMessage(event, now)
+	if _, err := store.InsertChatMessageIfNew(ctx, userMessage, chatContext); err != nil {
+		log.Printf("persist user chat message game=%s conversation=%s: %v", event.GameID, event.ConversationID, err)
+		return
+	}
+
+	agentMessage := domain.BuildStubAgentChatMessage(event, chatContext, time.Now().UTC().Format(time.RFC3339Nano))
+	stored, err := store.InsertChatMessageIfNew(ctx, agentMessage, chatContext)
+	if err != nil {
+		log.Printf("persist agent chat message game=%s conversation=%s: %v", event.GameID, event.ConversationID, err)
+		return
+	}
+	if !stored {
+		return
+	}
+
+	if err := bus.PublishJSON(domain.SubjectChatMessageDelta, domain.ChatEnvelopeFromMessage(agentMessage)); err != nil {
+		log.Printf("publish chat message game=%s conversation=%s: %v", event.GameID, event.ConversationID, err)
 	}
 }
 

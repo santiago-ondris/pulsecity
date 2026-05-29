@@ -110,6 +110,10 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return `${event.patch.relationships.length} relaciones cambiaron`;
   }
 
+  if (event.type === "chat.message") {
+    return `${event.agent_id}: ${event.body}`;
+  }
+
   return event.patch.message ?? "Patch recibido";
 }
 

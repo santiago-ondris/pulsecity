@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   AgentClientStates,
+  ChatClientMessages,
+  ChatMessageEvent,
   CityClientState,
   GameSetup,
   GameSummary,
@@ -68,6 +70,7 @@ const initialCityState: CityClientState = {
 const initialAgentStates: AgentClientStates = {};
 const initialRosterStates: RosterClientStates = {};
 const initialRelationshipStates: RelationshipClientStates = {};
+const initialChatMessages: ChatClientMessages = {};
 
 export function useNewGameFlow() {
   const [draft, setDraft] = useState<NewGameDraft>(initialDraft);
@@ -89,6 +92,7 @@ export function useNewGameFlow() {
   const [rosterStates, setRosterStates] = useState<RosterClientStates>(initialRosterStates);
   const [relationshipStates, setRelationshipStates] =
     useState<RelationshipClientStates>(initialRelationshipStates);
+  const [chatMessages, setChatMessages] = useState<ChatClientMessages>(initialChatMessages);
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
   const [narrativeInbox, setNarrativeInbox] = useState<NarrativeEvent[]>([]);
   const [activeNarrativeEvent, setActiveNarrativeEvent] = useState<NarrativeEvent | null>(null);
@@ -196,6 +200,12 @@ export function useNewGameFlow() {
       setOwnerIntroResponse(payload.choice);
       setActiveNarrativeEvent(null);
       setStatus(`Direccion inicial confirmada: ${payload.choice.label}.`);
+      return;
+    }
+
+    if (payload.type === "chat.message") {
+      setChatMessages((current) => appendChatMessage(current, payload));
+      setStatus(`${agentLabel(payload.agent_id)} respondió en el chat.`);
       return;
     }
 
@@ -618,6 +628,7 @@ export function useNewGameFlow() {
     setAgentStates(initialAgentStates);
     setRosterStates(initialRosterStates);
     setRelationshipStates(initialRelationshipStates);
+    setChatMessages(initialChatMessages);
     setOwnerIntroResponse(null);
     setActiveNarrativeEvent(null);
 
@@ -980,6 +991,61 @@ export function useNewGameFlow() {
     }
   }
 
+  async function sendAgentChatMessage(agentId: string, message: string, conversationId?: string) {
+    const trimmedAgentId = agentId.trim();
+    const trimmedMessage = message.trim();
+    if (!gameId || activeAuthKind === "none") {
+      setStatus("Necesitás una partida activa para hablar con agentes.");
+      return "";
+    }
+    if (!trimmedAgentId || !trimmedMessage) {
+      setStatus("Elegí un agente y escribí un mensaje.");
+      return "";
+    }
+
+    const nextConversationId = conversationId || `chat-local-${trimmedAgentId}`;
+    setChatMessages((current) =>
+      appendChatMessage(current, {
+        type: "chat.message",
+        subject: "agente.consulta_iniciada",
+        game_id: gameId,
+        conversation_id: nextConversationId,
+        message_id: `local-${Date.now()}`,
+        agent_id: trimmedAgentId,
+        sender: "gm",
+        body: trimmedMessage,
+        created_at: new Date().toISOString(),
+      }),
+    );
+    setStatus(`Consultando a ${agentLabel(trimmedAgentId)}...`);
+
+    try {
+      const response = await fetch(`${gatewayBaseUrl}/api/v1/games/${gameId}/agent-chat`, {
+        method: "POST",
+        headers: buildAuthHeaders({
+          guestToken,
+          sessionToken: userSession?.session_token,
+          includeContentType: true,
+        }),
+        body: JSON.stringify({
+          agent_id: trimmedAgentId,
+          message: trimmedMessage,
+          conversation_id: nextConversationId,
+        }),
+      });
+      const payload = (await response.json()) as { conversation_id?: string; error?: string };
+      if (!response.ok || !payload.conversation_id) {
+        setStatus(payload.error ?? "No se pudo iniciar el chat.");
+        return "";
+      }
+
+      return payload.conversation_id;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Fallo de red al enviar el chat.");
+      return "";
+    }
+  }
+
   function clearGuestSession(options?: { resetNavigation?: boolean }) {
     clearGuestSessionStorage();
     setGuestToken("");
@@ -1019,6 +1085,9 @@ export function useNewGameFlow() {
     setRecentResults([]);
     setCityState(initialCityState);
     setAgentStates(initialAgentStates);
+    setRosterStates(initialRosterStates);
+    setRelationshipStates(initialRelationshipStates);
+    setChatMessages(initialChatMessages);
     setEvents([]);
     setNarrativeInbox([]);
     setActiveNarrativeEvent(null);
@@ -1038,6 +1107,7 @@ export function useNewGameFlow() {
     currentPage,
     currentStage,
     cityState,
+    chatMessages,
     agentStates,
     draft,
     events,
@@ -1078,6 +1148,7 @@ export function useNewGameFlow() {
     switchToGuestSession,
     submitOwnerIntroChoice,
     updateTimeControl,
+    sendAgentChatMessage,
   };
 }
 
@@ -1091,6 +1162,22 @@ function prependMatchResult(current: SeasonMatchSummary[], next: SeasonMatchSumm
 
 function prependNarrativeEvent(current: NarrativeEvent[], next: NarrativeEvent) {
   return [next, ...current.filter((event) => event.event_id !== next.event_id)].slice(0, 8);
+}
+
+function appendChatMessage(current: ChatClientMessages, next: ChatMessageEvent) {
+  const messages = current[next.conversation_id] ?? [];
+  if (messages.some((message) => message.message_id === next.message_id)) {
+    return current;
+  }
+
+  return {
+    ...current,
+    [next.conversation_id]: [...messages, next].slice(-30),
+  };
+}
+
+function agentLabel(agentId: string) {
+  return agentId.replaceAll("_", " ");
 }
 
 function buildAuthHeaders({

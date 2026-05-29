@@ -55,6 +55,21 @@ CREATE TABLE IF NOT EXISTS narrative_events (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_narrative_events_game_match_kind
 ON narrative_events (game_id, source_match_id, kind)
 WHERE source_match_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS agent_chat_history (
+	message_id TEXT PRIMARY KEY,
+	game_id TEXT NOT NULL,
+	conversation_id TEXT NOT NULL,
+	agent_id TEXT NOT NULL,
+	sender TEXT NOT NULL,
+	body TEXT NOT NULL,
+	metadata_json TEXT NOT NULL,
+	context_json TEXT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_chat_history_conversation
+ON agent_chat_history (game_id, agent_id, conversation_id, created_at);
 `
 
 	_, err := s.pool.Exec(ctx, query)
@@ -201,4 +216,202 @@ WHERE game_id = $1;
 	}
 
 	return narrativeContext, nil
+}
+
+func (s *Store) LoadAgentChatContext(ctx context.Context, gameID, agentID string) (domain.AgentChatContext, error) {
+	context, err := s.loadIndividualAgentContext(ctx, gameID, agentID)
+	if err != nil {
+		return domain.AgentChatContext{}, err
+	}
+	if context.AgentID == "" {
+		context, err = s.loadPlayerAgentContext(ctx, gameID, agentID)
+		if err != nil {
+			return domain.AgentChatContext{}, err
+		}
+	}
+	if context.AgentID == "" {
+		context.AgentID = agentID
+		context.DisplayName = agentID
+		context.Role = "agente"
+		context.Domain = "estado general de la franquicia"
+		context.EmotionalState = "unknown"
+	}
+
+	relationship, err := s.loadRelationshipWithGM(ctx, gameID, agentID)
+	if err != nil {
+		return domain.AgentChatContext{}, err
+	}
+	context.Relationship = relationship
+
+	decisions, err := s.loadLatestGMDecisions(ctx, gameID, 5)
+	if err != nil {
+		return domain.AgentChatContext{}, err
+	}
+	context.Decisions = decisions
+
+	return context, nil
+}
+
+func (s *Store) InsertChatMessageIfNew(ctx context.Context, message domain.ChatMessage, chatContext domain.AgentChatContext) (bool, error) {
+	metadata, err := json.Marshal(message.Metadata)
+	if err != nil {
+		return false, fmt.Errorf("marshal chat metadata: %w", err)
+	}
+	contextPayload, err := json.Marshal(chatContext)
+	if err != nil {
+		return false, fmt.Errorf("marshal chat context: %w", err)
+	}
+
+	const query = `
+INSERT INTO agent_chat_history (
+	message_id,
+	game_id,
+	conversation_id,
+	agent_id,
+	sender,
+	body,
+	metadata_json,
+	context_json,
+	created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (message_id) DO NOTHING;
+`
+
+	commandTag, err := s.pool.Exec(ctx, query,
+		message.MessageID,
+		message.GameID,
+		message.ConversationID,
+		message.AgentID,
+		message.Sender,
+		message.Body,
+		string(metadata),
+		string(contextPayload),
+		parseTimeOrNow(message.CreatedAt),
+	)
+	if err != nil {
+		return false, fmt.Errorf("insert chat message: %w", err)
+	}
+
+	return commandTag.RowsAffected() > 0, nil
+}
+
+func (s *Store) loadIndividualAgentContext(ctx context.Context, gameID, agentID string) (domain.AgentChatContext, error) {
+	var chatContext domain.AgentChatContext
+	err := s.pool.QueryRow(ctx, `
+SELECT agent_id, display_name, role, domain, emotional_state, confidence, satisfaction, loyalty
+FROM agent_individual_states
+WHERE game_id = $1 AND agent_id = $2;
+`, gameID, agentID).Scan(
+		&chatContext.AgentID,
+		&chatContext.DisplayName,
+		&chatContext.Role,
+		&chatContext.Domain,
+		&chatContext.EmotionalState,
+		&chatContext.Confidence,
+		&chatContext.Satisfaction,
+		&chatContext.Loyalty,
+	)
+	if err == pgx.ErrNoRows {
+		return domain.AgentChatContext{}, nil
+	}
+	if err != nil {
+		return domain.AgentChatContext{}, fmt.Errorf("load individual agent context: %w", err)
+	}
+
+	return chatContext, nil
+}
+
+func (s *Store) loadPlayerAgentContext(ctx context.Context, gameID, playerID string) (domain.AgentChatContext, error) {
+	var chatContext domain.AgentChatContext
+	err := s.pool.QueryRow(ctx, `
+SELECT player_id, full_name, position, emotional_state, satisfaction, loyalty
+FROM agent_player_states
+WHERE game_id = $1 AND player_id = $2;
+`, gameID, playerID).Scan(
+		&chatContext.AgentID,
+		&chatContext.DisplayName,
+		&chatContext.Role,
+		&chatContext.EmotionalState,
+		&chatContext.Satisfaction,
+		&chatContext.Loyalty,
+	)
+	if err == pgx.ErrNoRows {
+		return domain.AgentChatContext{}, nil
+	}
+	if err != nil {
+		return domain.AgentChatContext{}, fmt.Errorf("load player agent context: %w", err)
+	}
+
+	chatContext.Domain = "rendimiento, rol, vestuario y experiencia personal dentro del roster"
+	return chatContext, nil
+}
+
+func (s *Store) loadRelationshipWithGM(ctx context.Context, gameID, agentID string) (domain.AgentRelationshipContext, error) {
+	var relationship domain.AgentRelationshipContext
+	err := s.pool.QueryRow(ctx, `
+SELECT trust, trend, last_event
+FROM agent_relationships
+WHERE game_id = $1
+	AND (
+		(agent_a_id = $2 AND agent_b_id = 'gm')
+		OR (agent_a_id = 'gm' AND agent_b_id = $2)
+	)
+ORDER BY updated_at DESC
+LIMIT 1;
+`, gameID, agentID).Scan(
+		&relationship.Trust,
+		&relationship.Trend,
+		&relationship.LastEvent,
+	)
+	if err == pgx.ErrNoRows {
+		return domain.AgentRelationshipContext{}, nil
+	}
+	if err != nil {
+		return domain.AgentRelationshipContext{}, fmt.Errorf("load relationship with gm: %w", err)
+	}
+
+	return relationship, nil
+}
+
+func (s *Store) loadLatestGMDecisions(ctx context.Context, gameID string, limit int) ([]domain.GMDecisionContext, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT decision_id, kind, simulated_date
+FROM gm_decisions_log
+WHERE game_id = $1
+ORDER BY created_at DESC
+LIMIT $2;
+`, gameID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("load latest gm decisions: %w", err)
+	}
+	defer rows.Close()
+
+	decisions := make([]domain.GMDecisionContext, 0)
+	for rows.Next() {
+		var decision domain.GMDecisionContext
+		if err := rows.Scan(&decision.DecisionID, &decision.Kind, &decision.SimulatedDate); err != nil {
+			return nil, err
+		}
+		decisions = append(decisions, decision)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return decisions, nil
+}
+
+func parseTimeOrNow(value string) time.Time {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err == nil {
+		return parsed.UTC()
+	}
+
+	parsed, err = time.Parse(time.RFC3339, value)
+	if err == nil {
+		return parsed.UTC()
+	}
+
+	return time.Now().UTC()
 }

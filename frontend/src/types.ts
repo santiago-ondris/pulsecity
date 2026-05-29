@@ -253,6 +253,21 @@ export interface NarrativeResponseEvent {
   timestamp: string;
 }
 
+export interface ChatMessageEvent {
+  type: "chat.message";
+  subject: string;
+  game_id: string;
+  conversation_id: string;
+  message_id: string;
+  agent_id: string;
+  sender: "gm" | "agent";
+  body: string;
+  metadata?: Record<string, string>;
+  created_at: string;
+}
+
+export type ChatClientMessages = Record<string, ChatMessageEvent[]>;
+
 export type RealtimeEvent =
   | MapSnapshotEnvelope
   | MapPatchEnvelope
@@ -263,7 +278,8 @@ export type RealtimeEvent =
   | RosterPatchEnvelope
   | RelationsPatchEnvelope
   | NarrativeEvent
-  | NarrativeResponseEvent;
+  | NarrativeResponseEvent
+  | ChatMessageEvent;
 
 export interface GuestSession {
   guest_token: string;

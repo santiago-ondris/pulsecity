@@ -36,6 +36,7 @@ func RegisterRoutes(mux *http.ServeMux, deps Dependencies) {
 	mux.HandleFunc("GET /api/v1/games", deps.listGames)
 	mux.HandleFunc("GET /api/v1/games/{gameID}", deps.getGame)
 	mux.HandleFunc("POST /api/v1/games/{gameID}/owner-intro-response", deps.answerOwnerIntro)
+	mux.HandleFunc("POST /api/v1/games/{gameID}/agent-chat", deps.startAgentChat)
 	mux.HandleFunc("GET /api/v1/games/{gameID}/snapshot", deps.getSnapshot)
 	mux.HandleFunc("POST /api/v1/games/{gameID}/time-control", deps.updateTimeControl)
 }
@@ -570,6 +571,91 @@ func (d Dependencies) answerOwnerIntro(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, choice)
+}
+
+func (d Dependencies) startAgentChat(w http.ResponseWriter, r *http.Request) {
+	currentActor, ok := d.requireActor(w, r)
+	if !ok {
+		return
+	}
+
+	gameID := r.PathValue("gameID")
+	if gameID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing game id",
+		})
+		return
+	}
+
+	game, found, err := d.Store.GetGame(r.Context(), gameID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to load game",
+		})
+		return
+	}
+	if !found || !gameOwnedBy(currentActor, game) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "game not found",
+		})
+		return
+	}
+
+	var request domain.AgentChatRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&request)
+	}
+	request.AgentID = strings.TrimSpace(request.AgentID)
+	request.Message = strings.TrimSpace(request.Message)
+	request.ConversationID = strings.TrimSpace(request.ConversationID)
+	if request.AgentID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing agent id",
+		})
+		return
+	}
+	if request.Message == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing message",
+		})
+		return
+	}
+	if len(request.Message) > 1200 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "message too long",
+		})
+		return
+	}
+	if request.ConversationID == "" {
+		request.ConversationID = "chat-" + uuid.NewString()
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	eventID := "agent-consultation-" + uuid.NewString()
+	event := domain.AgentConsultationStartedEvent{
+		EventMeta: domain.EventMeta{
+			EventID:       eventID,
+			GameID:        gameID,
+			OccurredAt:    now,
+			SchemaVersion: 1,
+		},
+		ConversationID: request.ConversationID,
+		AgentID:        request.AgentID,
+		Sender:         "gm",
+		Message:        request.Message,
+	}
+	if err := d.Bus.PublishJSON(domain.SubjectAgentConsultationStarted, event); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "failed to publish agent chat request",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, domain.AgentChatAcceptedResponse{
+		ConversationID: request.ConversationID,
+		RequestEventID: eventID,
+		Status:         "agent_chat_requested",
+	})
 }
 
 func guestTokenFromRequest(r *http.Request) string {

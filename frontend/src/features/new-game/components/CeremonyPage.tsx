@@ -1,8 +1,9 @@
-import type { CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import skylineBackdrop from "../../assets/landing-city-night.svg";
 import type {
   AgentClientStates,
+  ChatClientMessages,
   CityClientState,
   MapClientState,
   NarrativeEvent,
@@ -29,6 +30,7 @@ interface CeremonyPageProps {
   events: RealtimeEvent[];
   gameId: string;
   agentStates: AgentClientStates;
+  chatMessages: ChatClientMessages;
   cityState: CityClientState;
   mapState: MapClientState;
   narrativeInbox: NarrativeEvent[];
@@ -40,9 +42,18 @@ interface CeremonyPageProps {
   timeState: TimeClientState;
   onSetPaused: (paused: boolean) => void;
   onSetSpeed: (speed: 1 | 5 | 20) => void;
+  onSendAgentChatMessage: (agentId: string, message: string, conversationId?: string) => Promise<string>;
 }
 
 export function CeremonyPage(props: CeremonyPageProps) {
+  const [selectedAgentId, setSelectedAgentId] = useState("owner");
+  const [draftMessage, setDraftMessage] = useState("");
+  const activeConversationId = `chat-local-${selectedAgentId}`;
+  const activeChatMessages = props.chatMessages[activeConversationId] ?? [];
+  const selectedAgent = useMemo(
+    () => coreAgentOrder.find((agent) => agent.id === selectedAgentId) ?? coreAgentOrder[0],
+    [selectedAgentId],
+  );
   const terrainStats = summarizeTerrain(props.mapState.map_data?.cells ?? []);
   const stageIndex = stageSequence.indexOf(
     props.mapState.stage as (typeof stageSequence)[number],
@@ -231,7 +242,10 @@ export function CeremonyPage(props: CeremonyPageProps) {
               {coreAgentOrder.map((agent) => {
                 const state = props.agentStates[agent.id];
                 return (
-                  <article key={agent.id} className="ceremony-agent">
+                  <article
+                    key={agent.id}
+                    className={selectedAgentId === agent.id ? "ceremony-agent active" : "ceremony-agent"}
+                  >
                     <div className="ceremony-agent__header">
                       <strong>{agent.label}</strong>
                       <span className={`ceremony-agent__mood mood-${state?.mood ?? "idle"}`}>
@@ -247,10 +261,63 @@ export function CeremonyPage(props: CeremonyPageProps) {
                         </span>
                       ))}
                     </div>
+                    <button
+                      type="button"
+                      className="ceremony-agent__chat"
+                      onClick={() => setSelectedAgentId(agent.id)}
+                    >
+                      Abrir chat
+                    </button>
                   </article>
                 );
               })}
             </div>
+          </section>
+
+          <section className="ceremony-panel agent-chat-panel">
+            <div className="ceremony-panel__title">
+              <div>
+                <p className="eyebrow">Chat con agente</p>
+                <strong>{selectedAgent.label}</strong>
+              </div>
+              <span className="agent-chat-panel__status">Stub M3.5</span>
+            </div>
+
+            <div className="agent-chat-log" aria-live="polite">
+              {activeChatMessages.length === 0 ? (
+                <p className="agent-chat-log__empty">Abrí una consulta directa para probar el contexto real del agente.</p>
+              ) : (
+                activeChatMessages.map((message) => (
+                  <article
+                    key={message.message_id}
+                    className={message.sender === "gm" ? "chat-bubble gm" : "chat-bubble agent"}
+                  >
+                    <span>{message.sender === "gm" ? "GM" : selectedAgent.label}</span>
+                    <p>{message.body}</p>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <form
+              className="agent-chat-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const message = draftMessage;
+                setDraftMessage("");
+                void props.onSendAgentChatMessage(selectedAgentId, message, activeConversationId);
+              }}
+            >
+              <textarea
+                value={draftMessage}
+                onChange={(event) => setDraftMessage(event.target.value)}
+                placeholder="Preguntale por su area..."
+                rows={3}
+              />
+              <button type="submit" disabled={!draftMessage.trim()}>
+                Enviar
+              </button>
+            </form>
           </section>
 
           <section className="ceremony-panel">

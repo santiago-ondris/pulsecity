@@ -204,6 +204,18 @@ func main() {
 		log.Fatalf("subscribe roster patch events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectChatMessageDelta, func(_ string, data []byte) {
+		var event domain.ChatMessageEnvelope
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode chat message: %v", err)
+			return
+		}
+
+		hub.Broadcast(event)
+	}); err != nil {
+		log.Fatalf("subscribe chat message events: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
 		Bus:       bus,

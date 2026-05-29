@@ -7,6 +7,8 @@ Contratos de agentes para Milestone 2. El dueño del estado emocional es `agent-
 - `agente.estado_cambio`
 - `agente.relacion_cambio`
 - `agente.evento_critico`
+- `agente.consulta_iniciada`
+- `agente.respuesta_generada`
 
 ## Agentes core M2
 
@@ -96,6 +98,50 @@ Notas:
 - la relacion se identifica por el par canonico `(agent_a_id, agent_b_id)`.
 - la idempotencia se controla por `(game_id, relationship_key, source_event_id)`.
 - el `gateway` traduce `agente.relacion_cambio` a `relations.patch`.
+
+## `agente.consulta_iniciada`
+
+Publicado por `gateway` cuando el GM envia un mensaje directo a un agente.
+
+```json
+{
+  "event_id": "uuid",
+  "game_id": "uuid",
+  "occurred_at": "2026-05-29T00:00:04Z",
+  "schema_version": 1,
+  "conversation_id": "chat-uuid",
+  "agent_id": "head_coach",
+  "sender": "gm",
+  "message": "Como ves el vestuario?"
+}
+```
+
+Notas:
+
+- `narrative-service` consume este evento, ensambla contexto real y persiste el historial.
+- En M3.5 la respuesta es stub deterministica. En M3.6 este mismo contrato alimenta el LLM real.
+
+## `agente.respuesta_generada`
+
+Publicado por `narrative-service` cuando ya existe una respuesta del agente.
+
+```json
+{
+  "type": "chat.message",
+  "subject": "agente.respuesta_generada",
+  "game_id": "uuid",
+  "conversation_id": "chat-uuid",
+  "message_id": "agent-response-uuid",
+  "agent_id": "head_coach",
+  "sender": "agent",
+  "body": "[stub M3.5] Soy ...",
+  "metadata": {
+    "generation": "stub",
+    "source_subject": "agente.consulta_iniciada"
+  },
+  "created_at": "2026-05-29T00:00:05Z"
+}
+```
 
 ## Variables iniciales M2.11
 

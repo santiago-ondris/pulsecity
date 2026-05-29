@@ -14,6 +14,7 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
 - `roster.patch`
 - `relations.patch`
 - `narrative.event`
+- `chat.message`
 
 ## `time.patch`
 
@@ -149,3 +150,29 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
 ## `narrative.event`
 
 Este contrato reutiliza el payload visible de `narrativa.evento_generado` con `type = "narrative.event"`.
+
+## `chat.message`
+
+Delta emitido por `gateway` cuando `narrative-service` publica una respuesta de chat.
+
+```json
+{
+  "type": "chat.message",
+  "subject": "agente.respuesta_generada",
+  "game_id": "uuid",
+  "conversation_id": "chat-uuid",
+  "message_id": "agent-response-uuid",
+  "agent_id": "head_coach",
+  "sender": "agent",
+  "body": "[stub M3.5] Soy ...",
+  "metadata": {
+    "generation": "stub"
+  },
+  "created_at": "2026-05-29T00:00:05Z"
+}
+```
+
+Notas:
+
+- WebSocket sigue siendo delta-only. La rehidratacion de historial se agrega por REST cuando M3.5 se cierre por completo.
+- El mensaje del GM se persiste en `agent_chat_history`, pero el frontend puede mostrarlo optimistamente al enviar.

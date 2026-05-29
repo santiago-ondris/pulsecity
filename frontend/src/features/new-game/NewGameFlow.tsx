@@ -103,6 +103,7 @@ export function NewGameFlow() {
           events={flow.events}
           gameId={flow.gameId}
           agentStates={flow.agentStates}
+          chatMessages={flow.chatMessages}
           cityState={flow.cityState}
           mapState={flow.mapState}
           narrativeInbox={flow.narrativeInbox}
@@ -113,6 +114,8 @@ export function NewGameFlow() {
           status={flow.status}
           timeState={flow.timeState}
           onSetPaused={(paused) => void flow.updateTimeControl({ paused })}
+          onSendAgentChatMessage={(agentId, message, conversationId) =>
+            flow.sendAgentChatMessage(agentId, message, conversationId)}
           onSetSpeed={(speed) => void flow.updateTimeControl({ speed, paused: false })}
         />
       ) : null}
