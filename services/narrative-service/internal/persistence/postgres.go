@@ -296,6 +296,23 @@ ON CONFLICT (message_id) DO NOTHING;
 	return commandTag.RowsAffected() > 0, nil
 }
 
+func (s *Store) CountConversationMessages(ctx context.Context, gameID, agentID, conversationID, sender string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+SELECT COUNT(*)
+FROM agent_chat_history
+WHERE game_id = $1
+	AND agent_id = $2
+	AND conversation_id = $3
+	AND sender = $4;
+`, gameID, agentID, conversationID, sender).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count conversation messages: %w", err)
+	}
+
+	return count, nil
+}
+
 func (s *Store) loadIndividualAgentContext(ctx context.Context, gameID, agentID string) (domain.AgentChatContext, error) {
 	var chatContext domain.AgentChatContext
 	err := s.pool.QueryRow(ctx, `

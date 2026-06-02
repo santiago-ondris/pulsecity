@@ -109,6 +109,7 @@ export function NewGameFlow() {
           narrativeInbox={flow.narrativeInbox}
           ownerIntroResponseLabel={flow.ownerIntroResponse?.label ?? null}
           recentResults={flow.recentResults}
+          rosterStates={flow.rosterStates}
           seasonState={flow.seasonState}
           socketStatus={flow.socketStatus}
           status={flow.status}

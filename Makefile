@@ -1,5 +1,10 @@
 .PHONY: up down build test logs run-agent-service run-analytics-service run-city-service run-gateway run-map-service run-match-service run-narrative-service run-team-service run-frontend dev-app
 
+ifneq (,$(wildcard .env.local))
+include .env.local
+export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env.local)
+endif
+
 # Servicios
 up:
 	docker compose up -d

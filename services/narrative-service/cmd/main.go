@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -18,6 +19,8 @@ import (
 func main() {
 	natsURL := envOrDefault("NATS_URL", "nats://localhost:4222")
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://pulsecity:pulsecity@localhost:5433/pulsecity_dev?sslmode=disable")
+	chatConfig := domain.ChatRuntimeConfigFromEnv(os.Getenv)
+	chatResponder := domain.NewChatResponder(chatConfig)
 
 	bus, err := natsclient.New(natsURL)
 	if err != nil {
@@ -66,7 +69,7 @@ func main() {
 			return
 		}
 
-		go processAgentConsultation(bus, store, event)
+		go processAgentConsultation(bus, store, chatResponder, chatConfig, event)
 	}); err != nil {
 		log.Fatalf("subscribe agent consultation events: %v", err)
 	}
@@ -132,8 +135,14 @@ func processMatchFinished(bus *natsclient.Client, store *persistence.Store, matc
 	}
 }
 
-func processAgentConsultation(bus *natsclient.Client, store *persistence.Store, event domain.AgentConsultationStartedEvent) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+func processAgentConsultation(
+	bus *natsclient.Client,
+	store *persistence.Store,
+	responder domain.ChatResponder,
+	chatConfig domain.ChatRuntimeConfig,
+	event domain.AgentConsultationStartedEvent,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), chatConfig.RequestTimeout+2*time.Second)
 	defer cancel()
 
 	chatContext, err := store.LoadAgentChatContext(ctx, event.GameID, event.AgentID)
@@ -149,7 +158,36 @@ func processAgentConsultation(bus *natsclient.Client, store *persistence.Store, 
 		return
 	}
 
-	agentMessage := domain.BuildStubAgentChatMessage(event, chatContext, time.Now().UTC().Format(time.RFC3339Nano))
+	userTurns, err := store.CountConversationMessages(ctx, event.GameID, event.AgentID, event.ConversationID, "gm")
+	if err != nil {
+		log.Printf("count chat turns game=%s conversation=%s: %v", event.GameID, event.ConversationID, err)
+		return
+	}
+
+	var agentMessage domain.ChatMessage
+	if userTurns > chatConfig.MaxTurnsPerConversation {
+		agentMessage = domain.BuildTurnLimitAgentChatMessage(event, chatConfig, time.Now().UTC().Format(time.RFC3339Nano))
+	} else {
+		prompt := domain.BuildAgentChatPrompt(event, chatContext, chatConfig)
+		result, err := responder.GenerateAgentReply(ctx, domain.ChatGenerationRequest{
+			Event:   event,
+			Context: chatContext,
+			Prompt:  prompt,
+			Config:  chatConfig,
+		})
+		if err != nil {
+			log.Printf("generate chat response game=%s agent=%s: %v", event.GameID, event.AgentID, err)
+			agentMessage = domain.BuildFallbackAgentChatMessage(event, chatConfig, time.Now().UTC().Format(time.RFC3339Nano))
+		} else {
+			if result.Metadata == nil {
+				result.Metadata = map[string]string{}
+			}
+			result.Metadata["max_turns_per_conversation"] = envString(chatConfig.MaxTurnsPerConversation)
+			result.Metadata["max_response_chars"] = envString(chatConfig.MaxResponseChars)
+			agentMessage = domain.BuildAgentChatMessage(event, result, time.Now().UTC().Format(time.RFC3339Nano))
+		}
+	}
+
 	stored, err := store.InsertChatMessageIfNew(ctx, agentMessage, chatContext)
 	if err != nil {
 		log.Printf("persist agent chat message game=%s conversation=%s: %v", event.GameID, event.ConversationID, err)
@@ -185,4 +223,8 @@ func envOrDefault(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func envString(value int) string {
+	return fmt.Sprint(value)
 }
