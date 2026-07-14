@@ -5,6 +5,7 @@ const (
 	SubjectMatchScheduled   = "partido.programado"
 	SubjectMatchStarting    = "partido.iniciando"
 	SubjectMatchFinished    = "partido.terminado"
+	SubjectRosterPatchDelta = "roster.patch"
 	SubjectSeasonPatchDelta = "season.patch"
 	SubjectMatchResultDelta = "match.result"
 )
@@ -25,12 +26,14 @@ type DayAdvancedEvent struct {
 
 type MatchScheduledEvent struct {
 	EventMeta
-	MatchID       string        `json:"match_id"`
-	SimulatedDate string        `json:"simulated_date"`
-	HomeTeam      MatchTeam     `json:"home_team"`
-	AwayTeam      MatchTeam     `json:"away_team"`
-	Players       []MatchPlayer `json:"players"`
-	Seed          uint64        `json:"seed"`
+	MatchID       string               `json:"match_id"`
+	SimulatedDate string               `json:"simulated_date"`
+	HomeTeam      MatchTeam            `json:"home_team"`
+	AwayTeam      MatchTeam            `json:"away_team"`
+	HomeTactics   MatchTacticalContext `json:"home_tactics"`
+	AwayTactics   MatchTacticalContext `json:"away_tactics"`
+	Players       []MatchPlayer        `json:"players"`
+	Seed          uint64               `json:"seed"`
 }
 
 type MatchFinishedEvent struct {
@@ -45,6 +48,31 @@ type MatchFinishedEvent struct {
 	Seed          uint64           `json:"seed"`
 	BoxScore      []PlayerBoxScore `json:"box_score"`
 	KeyMoments    []KeyMoment      `json:"key_moments"`
+}
+
+type RosterPatchEnvelope struct {
+	Type    string           `json:"type"`
+	Subject string           `json:"subject"`
+	GameID  string           `json:"game_id"`
+	Patch   RosterStatePatch `json:"patch"`
+}
+
+type RosterStatePatch struct {
+	SimulatedDate string                 `json:"simulated_date"`
+	SourceEventID string                 `json:"source_event_id"`
+	SourceSubject string                 `json:"source_subject"`
+	Players       []PlayerEmotionalPatch `json:"players"`
+}
+
+type PlayerEmotionalPatch struct {
+	PlayerID         string  `json:"player_id"`
+	EmotionalState   string  `json:"emotional_state"`
+	Satisfaction     float64 `json:"satisfaction"`
+	Loyalty          float64 `json:"loyalty"`
+	Ego              float64 `json:"ego"`
+	CompetitiveDrive float64 `json:"competitive_drive"`
+	CityConnection   float64 `json:"city_connection"`
+	Summary          string  `json:"summary"`
 }
 
 type SeasonPatchEvent struct {
@@ -107,17 +135,24 @@ type MatchTeam struct {
 	HomeCourtAdvantage int8   `json:"home_court_advantage"`
 }
 
+type MatchTacticalContext struct {
+	System             string `json:"system"`
+	RotationPreference string `json:"rotation_preference"`
+	Flexibility        uint8  `json:"flexibility"`
+}
+
 type MatchPlayer struct {
-	PlayerID       string `json:"player_id"`
-	TeamID         string `json:"team_id"`
-	Rating         uint8  `json:"rating"`
-	Scoring        uint8  `json:"scoring"`
-	Rebounding     uint8  `json:"rebounding"`
-	Playmaking     uint8  `json:"playmaking"`
-	Defense        uint8  `json:"defense"`
-	Stamina        uint8  `json:"stamina"`
-	Fatigue        uint8  `json:"fatigue"`
-	EmotionalState int8   `json:"emotional_state"`
+	PlayerID        string `json:"player_id"`
+	TeamID          string `json:"team_id"`
+	ExpectedMinutes uint8  `json:"expected_minutes"`
+	Rating          uint8  `json:"rating"`
+	Scoring         uint8  `json:"scoring"`
+	Rebounding      uint8  `json:"rebounding"`
+	Playmaking      uint8  `json:"playmaking"`
+	Defense         uint8  `json:"defense"`
+	Stamina         uint8  `json:"stamina"`
+	Fatigue         uint8  `json:"fatigue"`
+	EmotionalState  int8   `json:"emotional_state"`
 }
 
 type PlayerBoxScore struct {

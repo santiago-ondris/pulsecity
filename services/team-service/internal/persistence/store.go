@@ -123,6 +123,17 @@ CREATE TABLE IF NOT EXISTS team_player_box_scores (
 CREATE INDEX IF NOT EXISTS idx_team_player_box_scores_game_id_player_id
 ON team_player_box_scores (game_id, player_id);
 
+CREATE TABLE IF NOT EXISTS team_player_match_states (
+	game_id TEXT NOT NULL,
+	player_id TEXT NOT NULL,
+	emotional_state SMALLINT NOT NULL DEFAULT 0,
+	source_simulated_date TEXT NOT NULL,
+	source_event_id TEXT NOT NULL,
+	source_subject TEXT NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	PRIMARY KEY (game_id, player_id)
+);
+
 CREATE TABLE IF NOT EXISTS team_records (
 	game_id TEXT PRIMARY KEY,
 	wins SMALLINT NOT NULL DEFAULT 0,
@@ -242,6 +253,39 @@ ON CONFLICT (game_id) DO NOTHING;
 	return nil
 }
 
+func (s *Store) ApplyRosterPatch(ctx context.Context, event domain.RosterPatchEnvelope) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin apply roster patch: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for _, player := range event.Patch.Players {
+		emotionalState := domain.EmotionalStateScore(player.EmotionalState)
+		if _, err := tx.Exec(ctx, `
+INSERT INTO team_player_match_states (
+	game_id, player_id, emotional_state, source_simulated_date, source_event_id, source_subject, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, NOW())
+ON CONFLICT (game_id, player_id) DO UPDATE SET
+	emotional_state = EXCLUDED.emotional_state,
+	source_simulated_date = EXCLUDED.source_simulated_date,
+	source_event_id = EXCLUDED.source_event_id,
+	source_subject = EXCLUDED.source_subject,
+	updated_at = NOW()
+WHERE team_player_match_states.source_simulated_date <= EXCLUDED.source_simulated_date;
+`, event.GameID, player.PlayerID, int16(emotionalState), event.Patch.SimulatedDate, event.Patch.SourceEventID, event.Patch.SourceSubject); err != nil {
+			return fmt.Errorf("upsert roster patch player %s: %w", player.PlayerID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit apply roster patch: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) DispatchScheduledMatchForDate(
 	ctx context.Context,
 	day domain.DayAdvancedEvent,
@@ -295,6 +339,14 @@ RETURNING match_id, game_id, simulated_date, home_team_id, away_team_id, opponen
 	if err != nil {
 		return domain.MatchScheduledEvent{}, false, err
 	}
+	playerStates, err := loadPlayerMatchStates(ctx, tx, scheduled.GameID)
+	if err != nil {
+		return domain.MatchScheduledEvent{}, false, err
+	}
+	record, err := loadSeasonRecord(ctx, tx, scheduled.GameID)
+	if err != nil {
+		return domain.MatchScheduledEvent{}, false, err
+	}
 
 	homeTeam := franchise
 	awayTeam := opponent
@@ -314,7 +366,10 @@ RETURNING match_id, game_id, simulated_date, home_team_id, away_team_id, opponen
 		Seed:          uint64(scheduled.Seed),
 		Status:        scheduled.Status,
 	}
-	event := domain.BuildMatchScheduledEvent(day, match, roster)
+	event := domain.BuildPreparedMatchScheduledEvent(day, match, roster, domain.MatchPreparation{
+		PlayerStates: playerStates,
+		Record:       record,
+	})
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.MatchScheduledEvent{}, false, fmt.Errorf("commit dispatch scheduled match: %w", err)
@@ -502,6 +557,54 @@ ORDER BY sort_order;
 	}
 
 	return roster, nil
+}
+
+func loadPlayerMatchStates(ctx context.Context, q queryer, gameID string) (map[string]domain.PlayerMatchState, error) {
+	rows, err := q.Query(ctx, `
+WITH recent_box_scores AS (
+	SELECT player_id, minutes
+	FROM team_player_box_scores
+	WHERE game_id = $1
+	ORDER BY created_at DESC
+	LIMIT 45
+),
+recent_minutes AS (
+	SELECT player_id, COALESCE(SUM(minutes), 0) AS recent_minutes
+	FROM recent_box_scores
+	GROUP BY player_id
+)
+SELECT
+	rp.player_id,
+	COALESCE(rm.recent_minutes, 0),
+	COALESCE(ms.emotional_state, 0)
+FROM team_roster_players rp
+LEFT JOIN recent_minutes rm ON rm.player_id = rp.player_id
+LEFT JOIN team_player_match_states ms ON ms.game_id = rp.game_id AND ms.player_id = rp.player_id
+WHERE rp.game_id = $1;
+`, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("load player match states %s: %w", gameID, err)
+	}
+	defer rows.Close()
+
+	states := make(map[string]domain.PlayerMatchState)
+	for rows.Next() {
+		var playerID string
+		var recentMinutes int64
+		var emotionalState int16
+		if err := rows.Scan(&playerID, &recentMinutes, &emotionalState); err != nil {
+			return nil, fmt.Errorf("scan player match state %s: %w", gameID, err)
+		}
+		states[playerID] = domain.PlayerMatchState{
+			RecentMinutes:  uint16(recentMinutes),
+			EmotionalState: int8(emotionalState),
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate player match states %s: %w", gameID, err)
+	}
+
+	return states, nil
 }
 
 func recalculateSeasonRecord(ctx context.Context, q queryer, gameID string) (domain.SeasonRecord, error) {

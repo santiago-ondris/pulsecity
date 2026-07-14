@@ -1,8 +1,8 @@
 use std::{error::Error, fmt};
 
 use crate::events::{
-    EventMeta, KeyMoment, MatchFinishedEvent, MatchPlayer, MatchScheduledEvent, MatchTeam,
-    PlayerBoxScore,
+    EventMeta, KeyMoment, MatchFinishedEvent, MatchPlayer, MatchScheduledEvent,
+    MatchTacticalContext, MatchTeam, PlayerBoxScore,
 };
 
 const SCHEMA_VERSION: u16 = 1;
@@ -15,6 +15,8 @@ pub struct MatchSimulationInput {
     pub simulated_date: String,
     pub home_team: MatchTeam,
     pub away_team: MatchTeam,
+    pub home_tactics: Option<MatchTacticalContext>,
+    pub away_tactics: Option<MatchTacticalContext>,
     pub players: Vec<PlayerSimulationInput>,
     pub seed: u64,
 }
@@ -23,6 +25,7 @@ pub struct MatchSimulationInput {
 pub struct PlayerSimulationInput {
     pub player_id: String,
     pub team_id: String,
+    pub expected_minutes: Option<u8>,
     pub rating: u8,
     pub scoring: u8,
     pub rebounding: u8,
@@ -71,9 +74,23 @@ pub fn simulate_match(input: &MatchSimulationInput) -> Result<MatchFinishedEvent
     let mut rng = DeterministicRng::new(input.seed);
     let home_players = team_players(&input.players, &input.home_team.team_id);
     let away_players = team_players(&input.players, &input.away_team.team_id);
-    let home_strength = team_strength(&input.home_team, &home_players, true);
-    let away_strength = team_strength(&input.away_team, &away_players, false);
-    let pace = (u16::from(input.home_team.pace) + u16::from(input.away_team.pace)) / 2;
+    let home_rotation = build_rotation(&home_players, input.home_tactics.as_ref());
+    let away_rotation = build_rotation(&away_players, input.away_tactics.as_ref());
+    let home_strength = team_strength(
+        &input.home_team,
+        input.home_tactics.as_ref(),
+        &home_rotation,
+        true,
+    );
+    let away_strength = team_strength(
+        &input.away_team,
+        input.away_tactics.as_ref(),
+        &away_rotation,
+        false,
+    );
+    let pace = tactical_pace(&input.home_team, input.home_tactics.as_ref())
+        + tactical_pace(&input.away_team, input.away_tactics.as_ref());
+    let pace = pace / 2;
     let base_score = 82 + pace / 4;
     let home_noise = i16::from(rng.range_u8(0, 17)) - 8;
     let away_noise = i16::from(rng.range_u8(0, 17)) - 8;
@@ -88,8 +105,8 @@ pub fn simulate_match(input: &MatchSimulationInput) -> Result<MatchFinishedEvent
         }
     }
 
-    let home_box = build_box_score(&mut rng, &home_players, home_score, true);
-    let away_box = build_box_score(&mut rng, &away_players, away_score, false);
+    let home_box = build_box_score(&mut rng, &home_rotation, home_score, true);
+    let away_box = build_box_score(&mut rng, &away_rotation, away_score, false);
     let mut box_score = Vec::with_capacity(home_box.len() + away_box.len());
     box_score.extend(home_box);
     box_score.extend(away_box);
@@ -121,8 +138,8 @@ pub fn simulate_match(input: &MatchSimulationInput) -> Result<MatchFinishedEvent
             input,
             home_score,
             away_score,
-            &home_players,
-            &away_players,
+            &home_rotation,
+            &away_rotation,
         ),
     })
 }
@@ -135,6 +152,8 @@ impl From<MatchScheduledEvent> for MatchSimulationInput {
             simulated_date: event.simulated_date,
             home_team: event.home_team,
             away_team: event.away_team,
+            home_tactics: event.home_tactics,
+            away_tactics: event.away_tactics,
             players: event
                 .players
                 .into_iter()
@@ -150,6 +169,7 @@ impl From<MatchPlayer> for PlayerSimulationInput {
         Self {
             player_id: player.player_id,
             team_id: player.team_id,
+            expected_minutes: player.expected_minutes,
             rating: player.rating,
             scoring: player.scoring,
             rebounding: player.rebounding,
@@ -203,28 +223,117 @@ fn team_players<'a>(
     selected
 }
 
-fn team_strength(team: &MatchTeam, players: &[&PlayerSimulationInput], is_home: bool) -> i16 {
-    let rotation_rating = players
+#[derive(Debug, Clone, Copy)]
+struct RotationPlayer<'a> {
+    player: &'a PlayerSimulationInput,
+    minutes: u8,
+}
+
+fn build_rotation<'a>(
+    players: &[&'a PlayerSimulationInput],
+    tactics: Option<&MatchTacticalContext>,
+) -> Vec<RotationPlayer<'a>> {
+    let profile = rotation_profile(tactics);
+    let mut rotation = Vec::with_capacity(players.len().min(profile.len()));
+
+    for (index, player) in players.iter().enumerate() {
+        let minutes = player
+            .expected_minutes
+            .unwrap_or_else(|| profile.get(index).copied().unwrap_or(0))
+            .min(42);
+        if minutes > 0 {
+            rotation.push(RotationPlayer {
+                player: *player,
+                minutes,
+            });
+        }
+    }
+
+    if rotation.is_empty() {
+        for (index, player) in players.iter().take(MIN_PLAYERS_PER_TEAM).enumerate() {
+            rotation.push(RotationPlayer {
+                player: *player,
+                minutes: profile.get(index).copied().unwrap_or(12).max(1),
+            });
+        }
+    }
+
+    rotation.sort_by_key(|slot| std::cmp::Reverse(slot.minutes));
+    rotation
+}
+
+fn rotation_profile(tactics: Option<&MatchTacticalContext>) -> &'static [u8] {
+    match tactics.map(|context| context.rotation_preference.as_str()) {
+        Some("top_heavy") => &[38, 36, 34, 32, 30, 24, 18, 14, 8, 6],
+        Some("deep") => &[29, 28, 27, 26, 25, 23, 22, 21, 20, 19],
+        _ => &[34, 32, 30, 29, 28, 24, 22, 18, 13, 10],
+    }
+}
+
+fn team_strength(
+    team: &MatchTeam,
+    tactics: Option<&MatchTacticalContext>,
+    rotation: &[RotationPlayer<'_>],
+    is_home: bool,
+) -> i16 {
+    let total_minutes = rotation
         .iter()
-        .take(8)
-        .map(|player| {
-            i16::from(player.rating) - i16::from(player.fatigue / 4)
-                + i16::from(player.emotional_state / 4)
+        .map(|slot| u16::from(slot.minutes))
+        .sum::<u16>()
+        .max(1);
+    let rotation_rating = rotation
+        .iter()
+        .map(|slot| {
+            let player = slot.player;
+            let player_rating = i32::from(player.rating) - i32::from(player.fatigue / 4)
+                + i32::from(player.emotional_state / 4)
+                + stamina_modifier(player.stamina);
+            player_rating * i32::from(slot.minutes)
         })
-        .sum::<i16>()
-        / 8;
+        .sum::<i32>()
+        / i32::from(total_minutes);
     let home_bonus = if is_home {
         i16::from(team.home_court_advantage)
     } else {
         0
     };
+    let (offense_bonus, defense_bonus) = tactical_rating_bonus(tactics);
 
     (i16::from(team.rating)
         + i16::from(team.offense_rating)
+        + offense_bonus
         + i16::from(team.defense_rating)
-        + rotation_rating)
+        + defense_bonus
+        + rotation_rating as i16)
         / 4
         + home_bonus
+}
+
+fn stamina_modifier(stamina: u8) -> i32 {
+    (i32::from(stamina) - 80) / 10
+}
+
+fn tactical_rating_bonus(tactics: Option<&MatchTacticalContext>) -> (i16, i16) {
+    let flexibility_bonus = tactics
+        .map(|context| i16::from(context.flexibility.saturating_sub(50)) / 25)
+        .unwrap_or(0);
+
+    match tactics.map(|context| context.system.as_str()) {
+        Some("pace_and_space") => (2 + flexibility_bonus, -1),
+        Some("defensive_grind") => (-1, 2 + flexibility_bonus),
+        Some("balanced") | None => (flexibility_bonus, flexibility_bonus),
+        _ => (0, 0),
+    }
+}
+
+fn tactical_pace(team: &MatchTeam, tactics: Option<&MatchTacticalContext>) -> u16 {
+    let adjustment = match tactics.map(|context| context.system.as_str()) {
+        Some("pace_and_space") => 4,
+        Some("defensive_grind") => -4,
+        _ => 0,
+    };
+
+    (i16::from(team.pace) + adjustment).clamp(80, 110) as u16
 }
 
 fn score_from_strength(
@@ -240,26 +349,23 @@ fn score_from_strength(
 
 fn build_box_score(
     rng: &mut DeterministicRng,
-    players: &[&PlayerSimulationInput],
+    rotation: &[RotationPlayer<'_>],
     team_score: u16,
     starters_first: bool,
 ) -> Vec<PlayerBoxScore> {
-    let rotation_size = players.len().min(10);
-    let rotation = &players[..rotation_size];
     let weights: Vec<u16> = rotation
         .iter()
-        .enumerate()
-        .map(|(index, player)| {
-            let role_bonus = if index < 5 { 26 } else { 12 };
-            u16::from(player.scoring) + role_bonus + u16::from(rng.range_u8(0, 9))
+        .map(|slot| {
+            let minutes_weight = u16::from(slot.minutes).max(1);
+            (u16::from(slot.player.scoring) + u16::from(rng.range_u8(0, 9))) * minutes_weight
         })
         .collect();
     let total_weight = weights.iter().copied().sum::<u16>().max(1);
     let mut remaining_points = team_score;
-    let mut box_score = Vec::with_capacity(rotation_size);
+    let mut box_score = Vec::with_capacity(rotation.len());
 
     for (index, player) in rotation.iter().enumerate() {
-        let is_last = index == rotation_size - 1;
+        let is_last = index == rotation.len() - 1;
         let points = if is_last {
             remaining_points
         } else {
@@ -270,15 +376,15 @@ fn build_box_score(
             remaining_points -= points;
             points
         };
-        let minutes_base = if index < 5 { 29 } else { 15 };
-        let minutes = minutes_base + rng.range_u8(0, 6);
-        let rebound_factor = u16::from(player.rebounding) / 12;
-        let assist_factor = u16::from(player.playmaking) / 16;
-        let defense_factor = u16::from(player.defense) / 28;
+        let minute_variation = i16::from(rng.range_u8(0, 5)) - 2;
+        let minutes = (i16::from(player.minutes) + minute_variation).clamp(1, 42) as u8;
+        let rebound_factor = u16::from(player.player.rebounding) / 12;
+        let assist_factor = u16::from(player.player.playmaking) / 16;
+        let defense_factor = u16::from(player.player.defense) / 28;
 
         box_score.push(PlayerBoxScore {
-            player_id: player.player_id.clone(),
-            team_id: player.team_id.clone(),
+            player_id: player.player.player_id.clone(),
+            team_id: player.player.team_id.clone(),
             minutes: if starters_first {
                 minutes
             } else {
@@ -301,8 +407,8 @@ fn build_key_moments(
     input: &MatchSimulationInput,
     home_score: u16,
     away_score: u16,
-    home_players: &[&PlayerSimulationInput],
-    away_players: &[&PlayerSimulationInput],
+    home_players: &[RotationPlayer<'_>],
+    away_players: &[RotationPlayer<'_>],
 ) -> Vec<KeyMoment> {
     let margin = home_score.abs_diff(away_score);
     let home_won = home_score > away_score;
@@ -318,8 +424,8 @@ fn build_key_moments(
     };
     let winner_players = if home_won { home_players } else { away_players };
     let loser_players = if home_won { away_players } else { home_players };
-    let winner_lead = &winner_players[0];
-    let loser_lead = &loser_players[0];
+    let winner_lead = winner_players[0].player;
+    let loser_lead = loser_players[0].player;
 
     vec![
         KeyMoment {
@@ -489,6 +595,36 @@ mod tests {
         assert_eq!(away_points, result.away_score);
     }
 
+    #[test]
+    fn explicit_minutes_drive_box_score_role() {
+        let mut input = sample_input();
+        set_expected_minutes(&mut input, "home-player-0", 8);
+        set_expected_minutes(&mut input, "home-player-9", 38);
+
+        let result = simulate_match(&input).expect("valid input");
+        let former_lead = box_line(&result, "home-player-0");
+        let promoted_guard = box_line(&result, "home-player-9");
+
+        assert!(promoted_guard.minutes > former_lead.minutes);
+        assert!(promoted_guard.points > former_lead.points);
+    }
+
+    #[test]
+    fn rotation_changes_match_output() {
+        let standard = simulate_match(&sample_input()).expect("valid input");
+        let mut changed_input = sample_input();
+        set_expected_minutes(&mut changed_input, "home-player-0", 4);
+        set_expected_minutes(&mut changed_input, "home-player-9", 40);
+        downgrade_player(&mut changed_input, "home-player-9", 55);
+
+        let changed = simulate_match(&changed_input).expect("valid input");
+
+        assert_ne!(
+            (standard.home_score, standard.away_score),
+            (changed.home_score, changed.away_score)
+        );
+    }
+
     fn sample_input() -> MatchSimulationInput {
         let home_team = MatchTeam {
             team_id: "home".to_string(),
@@ -522,6 +658,16 @@ mod tests {
             simulated_date: "2026-10-22".to_string(),
             home_team,
             away_team,
+            home_tactics: Some(MatchTacticalContext {
+                system: "balanced".to_string(),
+                rotation_preference: "standard".to_string(),
+                flexibility: 55,
+            }),
+            away_tactics: Some(MatchTacticalContext {
+                system: "balanced".to_string(),
+                rotation_preference: "standard".to_string(),
+                flexibility: 55,
+            }),
             players,
             seed: 42,
         }
@@ -531,6 +677,7 @@ mod tests {
         PlayerSimulationInput {
             player_id: format!("{team_id}-player-{index}"),
             team_id: team_id.to_string(),
+            expected_minutes: None,
             rating: 78u8.saturating_sub(index / 2),
             scoring: 76u8.saturating_sub(index / 3),
             rebounding: 70 + index % 8,
@@ -540,5 +687,35 @@ mod tests {
             fatigue: index,
             emotional_state: 2,
         }
+    }
+
+    fn set_expected_minutes(input: &mut MatchSimulationInput, player_id: &str, minutes: u8) {
+        let player = input
+            .players
+            .iter_mut()
+            .find(|player| player.player_id == player_id)
+            .expect("sample player exists");
+        player.expected_minutes = Some(minutes);
+    }
+
+    fn downgrade_player(input: &mut MatchSimulationInput, player_id: &str, rating: u8) {
+        let player = input
+            .players
+            .iter_mut()
+            .find(|player| player.player_id == player_id)
+            .expect("sample player exists");
+        player.rating = rating;
+        player.scoring = rating;
+        player.rebounding = rating;
+        player.playmaking = rating;
+        player.defense = rating;
+    }
+
+    fn box_line<'a>(result: &'a MatchFinishedEvent, player_id: &str) -> &'a PlayerBoxScore {
+        result
+            .box_score
+            .iter()
+            .find(|line| line.player_id == player_id)
+            .expect("box score line exists")
     }
 }

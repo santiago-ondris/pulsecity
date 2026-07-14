@@ -144,6 +144,12 @@ func TestBuildMatchScheduledEventIncludesFullInput(t *testing.T) {
 	if len(event.Players) != 25 {
 		t.Fatalf("BuildMatchScheduledEvent() players = %d, want 25", len(event.Players))
 	}
+	if event.HomeTactics.System == "" || event.AwayTactics.System == "" {
+		t.Fatal("BuildMatchScheduledEvent() tactics missing system")
+	}
+	if event.Players[0].ExpectedMinutes != 34 {
+		t.Fatalf("BuildMatchScheduledEvent() first player minutes = %d, want 34", event.Players[0].ExpectedMinutes)
+	}
 
 	ownPlayers := 0
 	opponentPlayers := 0
@@ -161,4 +167,89 @@ func TestBuildMatchScheduledEventIncludesFullInput(t *testing.T) {
 	if opponentPlayers != 10 {
 		t.Fatalf("BuildMatchScheduledEvent() opponent players = %d, want 10", opponentPlayers)
 	}
+}
+
+func TestBuildPreparedMatchScheduledEventUsesPlayerMatchState(t *testing.T) {
+	season, err := GenerateInitialSeason(GameStartedEvent{
+		GameID: "game-1",
+	})
+	if err != nil {
+		t.Fatalf("GenerateInitialSeason() error = %v, want nil", err)
+	}
+	player := season.Roster[0]
+
+	event := BuildPreparedMatchScheduledEvent(DayAdvancedEvent{
+		EventMeta: EventMeta{
+			GameID:     "game-1",
+			OccurredAt: "2026-10-22T00:00:00Z",
+		},
+		SimulatedDate: "2026-10-22",
+	}, season.Schedule[0], season.Roster, MatchPreparation{
+		PlayerStates: map[string]PlayerMatchState{
+			player.PlayerID: {
+				RecentMinutes:  96,
+				EmotionalState: 4,
+			},
+		},
+	})
+
+	line := matchPlayerByID(t, event.Players, player.PlayerID)
+	if line.Fatigue <= uint8(player.SortOrder%6) {
+		t.Fatalf("prepared player fatigue = %d, want above baseline", line.Fatigue)
+	}
+	if line.EmotionalState != 4 {
+		t.Fatalf("prepared player emotional state = %d, want 4", line.EmotionalState)
+	}
+}
+
+func TestBuildPreparedMatchScheduledEventDerivesCoachTactics(t *testing.T) {
+	season, err := GenerateInitialSeason(GameStartedEvent{
+		GameID: "game-1",
+	})
+	if err != nil {
+		t.Fatalf("GenerateInitialSeason() error = %v, want nil", err)
+	}
+	match := season.Schedule[0]
+	match.OpponentTeam.OffenseRating = 85
+	match.OpponentTeam.Pace = 103
+	match.AwayTeam = match.OpponentTeam
+
+	event := BuildPreparedMatchScheduledEvent(DayAdvancedEvent{
+		EventMeta: EventMeta{
+			GameID:     "game-1",
+			OccurredAt: "2026-10-22T00:00:00Z",
+		},
+		SimulatedDate: "2026-10-22",
+	}, match, season.Roster, MatchPreparation{
+		Record: SeasonRecord{
+			GameID: "game-1",
+			Wins:   2,
+			Losses: 6,
+		},
+	})
+
+	if event.HomeTactics.System != "defensive_grind" {
+		t.Fatalf("home tactics system = %q, want defensive_grind", event.HomeTactics.System)
+	}
+	if event.HomeTactics.RotationPreference != "top_heavy" {
+		t.Fatalf("home rotation = %q, want top_heavy", event.HomeTactics.RotationPreference)
+	}
+	if event.HomeTactics.Flexibility <= 58 {
+		t.Fatalf("home flexibility = %d, want above 58", event.HomeTactics.Flexibility)
+	}
+	if event.AwayTactics.System != "pace_and_space" {
+		t.Fatalf("away tactics system = %q, want pace_and_space", event.AwayTactics.System)
+	}
+}
+
+func matchPlayerByID(t *testing.T, players []MatchPlayer, playerID string) MatchPlayer {
+	t.Helper()
+	for _, player := range players {
+		if player.PlayerID == playerID {
+			return player
+		}
+	}
+
+	t.Fatalf("player %q not found", playerID)
+	return MatchPlayer{}
 }

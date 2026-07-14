@@ -20,6 +20,10 @@ pub struct MatchScheduledEvent {
     pub simulated_date: String,
     pub home_team: MatchTeam,
     pub away_team: MatchTeam,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_tactics: Option<MatchTacticalContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub away_tactics: Option<MatchTacticalContext>,
     pub players: Vec<MatchPlayer>,
     pub seed: u64,
 }
@@ -61,9 +65,18 @@ pub struct MatchTeam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchTacticalContext {
+    pub system: String,
+    pub rotation_preference: String,
+    pub flexibility: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MatchPlayer {
     pub player_id: String,
     pub team_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_minutes: Option<u8>,
     pub rating: u8,
     pub scoring: u8,
     pub rebounding: u8,
@@ -107,5 +120,44 @@ mod tests {
         assert_eq!(SUBJECT_MATCH_SCHEDULED, "partido.programado");
         assert_eq!(SUBJECT_MATCH_STARTING, "partido.iniciando");
         assert_eq!(SUBJECT_MATCH_FINISHED, "partido.terminado");
+    }
+
+    #[test]
+    fn match_scheduled_event_accepts_m2_payload_without_tactics() {
+        let payload = r#"{
+            "event_id": "event-1",
+            "game_id": "game-1",
+            "occurred_at": "2026-10-22T00:00:00Z",
+            "schema_version": 1,
+            "match_id": "match-1",
+            "simulated_date": "2026-10-22",
+            "home_team": {
+                "team_id": "home",
+                "name": "Home",
+                "abbreviation": "HOM",
+                "rating": 78,
+                "offense_rating": 79,
+                "defense_rating": 76,
+                "pace": 99,
+                "home_court_advantage": 3
+            },
+            "away_team": {
+                "team_id": "away",
+                "name": "Away",
+                "abbreviation": "AWY",
+                "rating": 77,
+                "offense_rating": 76,
+                "defense_rating": 78,
+                "pace": 97,
+                "home_court_advantage": 2
+            },
+            "players": [],
+            "seed": 42
+        }"#;
+
+        let event: MatchScheduledEvent = serde_json::from_str(payload).expect("valid m2 payload");
+
+        assert_eq!(event.home_tactics, None);
+        assert_eq!(event.away_tactics, None);
     }
 }

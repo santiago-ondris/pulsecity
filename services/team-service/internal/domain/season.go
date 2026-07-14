@@ -41,6 +41,16 @@ type RosterPlayer struct {
 	SortOrder     int
 }
 
+type PlayerMatchState struct {
+	RecentMinutes  uint16
+	EmotionalState int8
+}
+
+type MatchPreparation struct {
+	PlayerStates map[string]PlayerMatchState
+	Record       SeasonRecord
+}
+
 type ScheduledMatch struct {
 	MatchID       string
 	GameID        string
@@ -54,12 +64,21 @@ type ScheduledMatch struct {
 }
 
 func BuildMatchScheduledEvent(day DayAdvancedEvent, match ScheduledMatch, roster []RosterPlayer) MatchScheduledEvent {
+	return BuildPreparedMatchScheduledEvent(day, match, roster, MatchPreparation{})
+}
+
+func BuildPreparedMatchScheduledEvent(
+	day DayAdvancedEvent,
+	match ScheduledMatch,
+	roster []RosterPlayer,
+	preparation MatchPreparation,
+) MatchScheduledEvent {
 	players := make([]MatchPlayer, 0, len(roster)+10)
 	for _, player := range roster {
 		if player.RosterStatus != "active" {
 			continue
 		}
-		players = append(players, PlayerForRoster(player))
+		players = append(players, PlayerForRoster(player, preparation.PlayerStates[player.PlayerID]))
 	}
 	players = append(players, AbstractOpponentPlayers(match.GameID, match.MatchID, match.OpponentTeam)...)
 
@@ -74,24 +93,27 @@ func BuildMatchScheduledEvent(day DayAdvancedEvent, match ScheduledMatch, roster
 		SimulatedDate: match.SimulatedDate,
 		HomeTeam:      match.HomeTeam,
 		AwayTeam:      match.AwayTeam,
+		HomeTactics:   TacticalContextForTeam(match.HomeTeam, match.OpponentTeam, preparation.Record),
+		AwayTactics:   TacticalContextForTeam(match.AwayTeam, match.OpponentTeam, preparation.Record),
 		Players:       players,
 		Seed:          match.Seed,
 	}
 }
 
-func PlayerForRoster(player RosterPlayer) MatchPlayer {
+func PlayerForRoster(player RosterPlayer, state PlayerMatchState) MatchPlayer {
 	base := player.OverallRating
 	return MatchPlayer{
-		PlayerID:       player.PlayerID,
-		TeamID:         OwnTeamID,
-		Rating:         base,
-		Scoring:        clampRating(int(base) + scoringPositionBias(player.Position)),
-		Rebounding:     clampRating(int(base) + reboundingPositionBias(player.Position)),
-		Playmaking:     clampRating(int(base) + playmakingPositionBias(player.Position)),
-		Defense:        clampRating(int(base) - 1),
-		Stamina:        82,
-		Fatigue:        uint8(player.SortOrder % 9),
-		EmotionalState: 0,
+		PlayerID:        player.PlayerID,
+		TeamID:          OwnTeamID,
+		ExpectedMinutes: expectedMinutesForRotationSlot(player.SortOrder - 1),
+		Rating:          base,
+		Scoring:         clampRating(int(base) + scoringPositionBias(player.Position)),
+		Rebounding:      clampRating(int(base) + reboundingPositionBias(player.Position)),
+		Playmaking:      clampRating(int(base) + playmakingPositionBias(player.Position)),
+		Defense:         clampRating(int(base) - 1),
+		Stamina:         82,
+		Fatigue:         fatigueFromRecentMinutes(state.RecentMinutes, player.SortOrder),
+		EmotionalState:  state.EmotionalState,
 	}
 }
 
@@ -102,20 +124,108 @@ func AbstractOpponentPlayers(gameID, matchID string, opponent MatchTeam) []Match
 		variation := int(stableHash(gameID, matchID, opponent.TeamID, position, fmt.Sprint(index))%7) - 3
 		base := clampRating(int(opponent.Rating) + variation)
 		players = append(players, MatchPlayer{
-			PlayerID:       fmt.Sprintf("%s-%s-player-%02d", matchID, opponent.TeamID, index+1),
-			TeamID:         opponent.TeamID,
-			Rating:         base,
-			Scoring:        clampRating(int(base) + scoringPositionBias(position)),
-			Rebounding:     clampRating(int(base) + reboundingPositionBias(position)),
-			Playmaking:     clampRating(int(base) + playmakingPositionBias(position)),
-			Defense:        clampRating(int(base) - 1),
-			Stamina:        80,
-			Fatigue:        uint8(index % 7),
-			EmotionalState: 0,
+			PlayerID:        fmt.Sprintf("%s-%s-player-%02d", matchID, opponent.TeamID, index+1),
+			TeamID:          opponent.TeamID,
+			ExpectedMinutes: expectedMinutesForRotationSlot(index),
+			Rating:          base,
+			Scoring:         clampRating(int(base) + scoringPositionBias(position)),
+			Rebounding:      clampRating(int(base) + reboundingPositionBias(position)),
+			Playmaking:      clampRating(int(base) + playmakingPositionBias(position)),
+			Defense:         clampRating(int(base) - 1),
+			Stamina:         80,
+			Fatigue:         uint8(index % 7),
+			EmotionalState:  0,
 		})
 	}
 
 	return players
+}
+
+func TacticalContextForTeam(team, opponent MatchTeam, record SeasonRecord) MatchTacticalContext {
+	if team.TeamID != OwnTeamID {
+		return opponentTacticalContext(team)
+	}
+
+	system := "balanced"
+	rotationPreference := "standard"
+	flexibility := uint8(58)
+
+	if opponent.Pace >= 100 || opponent.OffenseRating >= 82 {
+		system = "defensive_grind"
+		flexibility = 62
+	}
+	if opponent.DefenseRating <= 74 {
+		system = "pace_and_space"
+	}
+	if record.Losses > record.Wins+2 {
+		rotationPreference = "top_heavy"
+		flexibility += 3
+	}
+	if record.Wins > record.Losses+4 {
+		rotationPreference = "deep"
+	}
+
+	return MatchTacticalContext{
+		System:             system,
+		RotationPreference: rotationPreference,
+		Flexibility:        flexibility,
+	}
+}
+
+func opponentTacticalContext(team MatchTeam) MatchTacticalContext {
+	system := "balanced"
+	if team.Pace >= 100 || team.OffenseRating >= 82 {
+		system = "pace_and_space"
+	}
+	if team.DefenseRating >= team.OffenseRating+3 {
+		system = "defensive_grind"
+	}
+
+	return MatchTacticalContext{
+		System:             system,
+		RotationPreference: "standard",
+		Flexibility:        52,
+	}
+}
+
+func expectedMinutesForRotationSlot(slot int) uint8 {
+	minutes := []uint8{34, 32, 30, 29, 28, 24, 22, 18, 13, 10, 0, 0, 0, 0, 0}
+	if slot < 0 || slot >= len(minutes) {
+		return 0
+	}
+
+	return minutes[slot]
+}
+
+func fatigueFromRecentMinutes(recentMinutes uint16, sortOrder int) uint8 {
+	baseline := uint8(sortOrder % 6)
+	switch {
+	case recentMinutes >= 105:
+		return baseline + 18
+	case recentMinutes >= 90:
+		return baseline + 14
+	case recentMinutes >= 72:
+		return baseline + 10
+	case recentMinutes >= 48:
+		return baseline + 6
+	default:
+		return baseline
+	}
+}
+
+func EmotionalStateScore(state string) int8 {
+	switch strings.TrimSpace(strings.ToLower(state)) {
+	case "confident", "energized", "locked_in":
+		return 4
+	case "satisfied", "steady", "calm":
+		return 1
+	case "frustrated", "anxious":
+		return -3
+	case "disconnected", "angry":
+		return -5
+	default:
+		return 0
+	}
 }
 
 func GenerateInitialSeason(event GameStartedEvent) (InitialSeason, error) {

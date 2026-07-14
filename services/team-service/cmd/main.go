@@ -129,6 +129,26 @@ func run() error {
 		return err
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectRosterPatchDelta, func(_ string, data []byte) {
+		var event domain.RosterPatchEnvelope
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode roster patch event: %v", err)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := store.ApplyRosterPatch(ctx, event); err != nil {
+			log.Printf("apply roster patch game=%s source=%s: %v", event.GameID, event.Patch.SourceEventID, err)
+			return
+		}
+
+		log.Printf("roster match state updated game=%s players=%d source=%s", event.GameID, len(event.Patch.Players), event.Patch.SourceEventID)
+	}); err != nil {
+		return err
+	}
+
 	log.Printf("%s connected to nats at %s", domain.ServiceName, natsURL)
 
 	stop := make(chan os.Signal, 1)
