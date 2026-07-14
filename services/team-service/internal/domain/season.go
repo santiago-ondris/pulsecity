@@ -46,6 +46,18 @@ type PlayerMatchState struct {
 	EmotionalState int8
 }
 
+type InjuryAssessmentInput struct {
+	GameID         string
+	MatchID        string
+	OccurredAt     string
+	SimulatedDate  string
+	PlayerID       string
+	TeamID         string
+	Minutes        uint8
+	RecentMinutes  uint16
+	EmotionalState int8
+}
+
 type MatchPreparation struct {
 	PlayerStates map[string]PlayerMatchState
 	Record       SeasonRecord
@@ -225,6 +237,68 @@ func EmotionalStateScore(state string) int8 {
 		return -5
 	default:
 		return 0
+	}
+}
+
+func AssessInjuryRisk(input InjuryAssessmentInput) (PlayerInjuredEvent, bool, error) {
+	if input.TeamID != OwnTeamID {
+		return PlayerInjuredEvent{}, false, nil
+	}
+
+	workload := input.RecentMinutes
+	if workload < 96 {
+		return PlayerInjuredEvent{}, false, nil
+	}
+
+	risk := int(workload-80) / 2
+	if input.Minutes >= 34 {
+		risk += int(input.Minutes - 30)
+	}
+	if input.EmotionalState < 0 {
+		risk += int(-input.EmotionalState)
+	}
+	if workload >= 132 {
+		risk = 100
+	}
+
+	roll := int(stableHash(input.GameID, input.MatchID, input.PlayerID, "injury") % 100)
+	if roll >= risk {
+		return PlayerInjuredEvent{}, false, nil
+	}
+
+	injuredOn, err := time.Parse(time.DateOnly, input.SimulatedDate)
+	if err != nil {
+		return PlayerInjuredEvent{}, false, fmt.Errorf("assess injury risk: parse simulated date %q: %w", input.SimulatedDate, err)
+	}
+	severity, estimatedDays := injurySeverity(workload)
+
+	return PlayerInjuredEvent{
+		EventMeta: EventMeta{
+			EventID:       fmt.Sprintf("player-injured-%s-%s", input.MatchID, input.PlayerID),
+			GameID:        input.GameID,
+			OccurredAt:    input.OccurredAt,
+			SchemaVersion: 1,
+		},
+		InjuryID:             fmt.Sprintf("injury-%s-%s", input.MatchID, input.PlayerID),
+		PlayerID:             input.PlayerID,
+		Severity:             severity,
+		EstimatedDaysOut:     estimatedDays,
+		InjuredOn:            input.SimulatedDate,
+		ExpectedRecoveryDate: injuredOn.AddDate(0, 0, int(estimatedDays)).Format(time.DateOnly),
+		Reason:               "workload_accumulation",
+		SourceMatchID:        input.MatchID,
+		WorkloadScore:        workload,
+	}, true, nil
+}
+
+func injurySeverity(workload uint16) (string, uint16) {
+	switch {
+	case workload >= 150:
+		return "major", 21
+	case workload >= 132:
+		return "moderate", 10
+	default:
+		return "minor", 5
 	}
 }
 

@@ -3,8 +3,9 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::{
     agents::{
-        AgentRelationship, CoreAgentState, IndividualAgentState, MatchAgentReactions,
-        PlayerAgentState, TeamRosterPlayer, apply_match_finished, apply_match_to_player_agents,
+        AgentRelationship, AgentRelationshipChange, CoreAgentState, IndividualAgentState,
+        MatchAgentReactions, PlayerAgentState, TeamRosterPlayer,
+        apply_gm_decision_to_relationships, apply_match_finished, apply_match_to_player_agents,
         apply_match_to_relationships, default_agent_relationships, default_core_agent_state,
         default_individual_agent_states, default_player_agent_state,
     },
@@ -390,6 +391,50 @@ ON CONFLICT DO NOTHING;
             .with_context(|| "record gm decision")?;
 
         Ok(inserted > 0)
+    }
+
+    pub async fn apply_gm_decision_relationships(
+        &mut self,
+        event: &GMDecisionRegisteredEvent,
+        occurred_at: String,
+    ) -> Result<Vec<AgentRelationshipChange>> {
+        self.ensure_agent_relationships(&event.meta.game_id).await?;
+
+        let transaction = self
+            .client
+            .transaction()
+            .await
+            .with_context(|| "begin gm decision relationship reaction")?;
+
+        let relationship_states =
+            load_agent_relationships(&transaction, &event.meta.game_id).await?;
+        let relationship_changes =
+            apply_gm_decision_to_relationships(relationship_states, event, occurred_at);
+        let mut persisted_changes = Vec::with_capacity(relationship_changes.len());
+        for change in relationship_changes {
+            let key = crate::agents::relationship_key(
+                &change.relationship.agent_a_id,
+                &change.relationship.agent_b_id,
+            );
+            if mark_relationship_event_processed(
+                &transaction,
+                &event.meta.game_id,
+                &key,
+                &event.meta.event_id,
+            )
+            .await?
+            {
+                save_agent_relationship(&transaction, &change.relationship).await?;
+                persisted_changes.push(change);
+            }
+        }
+
+        transaction
+            .commit()
+            .await
+            .with_context(|| "commit gm decision relationship reaction")?;
+
+        Ok(persisted_changes)
     }
 
     pub async fn latest_gm_decisions(

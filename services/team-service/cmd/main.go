@@ -79,6 +79,19 @@ func run() error {
 			return
 		}
 		for _, day := range days {
+			recovered, err := store.RecoverPlayersForDate(ctx, day)
+			if err != nil {
+				log.Printf("recover players game=%s date=%s: %v", day.GameID, day.SimulatedDate, err)
+				return
+			}
+			for _, event := range recovered {
+				if err := bus.PublishJSON(domain.SubjectPlayerRecovered, event); err != nil {
+					log.Printf("publish recovered player game=%s player=%s: %v", event.GameID, event.PlayerID, err)
+					return
+				}
+				log.Printf("player recovered game=%s player=%s injury=%s", event.GameID, event.PlayerID, event.InjuryID)
+			}
+
 			scheduled, found, err := store.DispatchScheduledMatchForDate(ctx, day)
 			if err != nil {
 				log.Printf("dispatch scheduled match game=%s date=%s: %v", day.GameID, day.SimulatedDate, err)
@@ -109,7 +122,7 @@ func run() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		record, changed, err := store.ApplyMatchFinished(ctx, event)
+		record, injuries, changed, err := store.ApplyMatchFinished(ctx, event)
 		if err != nil {
 			log.Printf("apply match finished game=%s match=%s: %v", event.GameID, event.MatchID, err)
 			return
@@ -125,6 +138,13 @@ func run() error {
 		}
 
 		log.Printf("record updated game=%s record=%d-%d match=%s", record.GameID, record.Wins, record.Losses, event.MatchID)
+		for _, injury := range injuries {
+			if err := bus.PublishJSON(domain.SubjectPlayerInjured, injury); err != nil {
+				log.Printf("publish injured player game=%s player=%s: %v", injury.GameID, injury.PlayerID, err)
+				return
+			}
+			log.Printf("player injured game=%s player=%s severity=%s days=%d", injury.GameID, injury.PlayerID, injury.Severity, injury.EstimatedDaysOut)
+		}
 	}); err != nil {
 		return err
 	}
@@ -145,6 +165,31 @@ func run() error {
 		}
 
 		log.Printf("roster match state updated game=%s players=%d source=%s", event.GameID, len(event.Patch.Players), event.Patch.SourceEventID)
+	}); err != nil {
+		return err
+	}
+
+	if _, err := bus.Subscribe(domain.SubjectGMDecision, func(_ string, data []byte) {
+		var event domain.GMDecisionRegisteredEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode gm decision event: %v", err)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		recovered, err := store.ApplyMedicalDecision(ctx, event)
+		if err != nil {
+			log.Printf("apply medical decision game=%s decision=%s: %v", event.GameID, event.DecisionID, err)
+			return
+		}
+		for _, recoveredEvent := range recovered {
+			if err := bus.PublishJSON(domain.SubjectPlayerRecovered, recoveredEvent); err != nil {
+				log.Printf("publish forced recovered player game=%s player=%s: %v", recoveredEvent.GameID, recoveredEvent.PlayerID, err)
+				return
+			}
+		}
 	}); err != nil {
 		return err
 	}

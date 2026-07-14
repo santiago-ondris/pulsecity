@@ -242,6 +242,50 @@ func TestBuildPreparedMatchScheduledEventDerivesCoachTactics(t *testing.T) {
 	}
 }
 
+func TestAssessInjuryRiskCreatesDeterministicInjuryForHeavyWorkload(t *testing.T) {
+	injury, injured, err := AssessInjuryRisk(InjuryAssessmentInput{
+		GameID:         "game-1",
+		MatchID:        "match-1",
+		OccurredAt:     "2026-10-28T00:00:00Z",
+		SimulatedDate:  "2026-10-28",
+		PlayerID:       "player-1",
+		TeamID:         OwnTeamID,
+		Minutes:        38,
+		RecentMinutes:  158,
+		EmotionalState: -3,
+	})
+	if err != nil {
+		t.Fatalf("AssessInjuryRisk() error = %v, want nil", err)
+	}
+	if !injured {
+		t.Fatal("AssessInjuryRisk() injured = false, want true")
+	}
+	if injury.Severity != "major" {
+		t.Fatalf("AssessInjuryRisk() severity = %q, want major", injury.Severity)
+	}
+	if injury.ExpectedRecoveryDate != "2026-11-18" {
+		t.Fatalf("AssessInjuryRisk() recovery date = %q, want 2026-11-18", injury.ExpectedRecoveryDate)
+	}
+}
+
+func TestAssessInjuryRiskIgnoresOpponentPlayers(t *testing.T) {
+	_, injured, err := AssessInjuryRisk(InjuryAssessmentInput{
+		GameID:        "game-1",
+		MatchID:       "match-1",
+		SimulatedDate: "2026-10-28",
+		PlayerID:      "opponent-player-1",
+		TeamID:        "rival-1",
+		Minutes:       42,
+		RecentMinutes: 180,
+	})
+	if err != nil {
+		t.Fatalf("AssessInjuryRisk(opponent) error = %v, want nil", err)
+	}
+	if injured {
+		t.Fatal("AssessInjuryRisk(opponent) injured = true, want false")
+	}
+}
+
 func matchPlayerByID(t *testing.T, players []MatchPlayer, playerID string) MatchPlayer {
 	t.Helper()
 	for _, player := range players {

@@ -161,7 +161,7 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
                     None => continue,
                 };
 
-                process_gm_decision_registered(&store, &event).await?;
+                process_gm_decision_registered(&client, &mut store, &event).await?;
             }
         }
     }
@@ -312,7 +312,7 @@ pub async fn run_for_game(
                     continue;
                 }
 
-                process_gm_decision_registered(&store, &event).await?;
+                process_gm_decision_registered(&client, &mut store, &event).await?;
             }
         }
     }
@@ -387,7 +387,8 @@ async fn process_map_generation_started(
 }
 
 async fn process_gm_decision_registered(
-    store: &Store,
+    client: &Client,
+    store: &mut Store,
     event: &GMDecisionRegisteredEvent,
 ) -> Result<()> {
     let inserted = store
@@ -408,6 +409,24 @@ async fn process_gm_decision_registered(
             decision_id = %event.decision_id,
             "gm decision already recorded"
         );
+    }
+
+    let relationship_changes = store
+        .apply_gm_decision_relationships(event, now_rfc3339())
+        .await
+        .with_context(|| {
+            format!(
+                "apply gm decision relationships game={}",
+                event.meta.game_id
+            )
+        })?;
+    for change in relationship_changes {
+        let payload = serde_json::to_vec(&change.event)
+            .context("encode agente.relacion_cambio from gm decision")?;
+        client
+            .publish(SUBJECT_AGENT_RELATIONSHIP_CHANGED, payload.into())
+            .await
+            .context("publish agente.relacion_cambio from gm decision")?;
     }
 
     Ok(())

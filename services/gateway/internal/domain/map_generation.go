@@ -68,6 +68,13 @@ type OwnerIntroResponseRequest struct {
 	ChoiceID string `json:"choice_id"`
 }
 
+type MedicalDecisionRequest struct {
+	InjuryID      string `json:"injury_id"`
+	PlayerID      string `json:"player_id"`
+	ChoiceID      string `json:"choice_id"`
+	SimulatedDate string `json:"simulated_date"`
+}
+
 type NarrativeChoice struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
@@ -178,6 +185,8 @@ const (
 	SubjectAgentPatchDelta      = "agent.patch"
 	SubjectRosterPatchDelta     = "roster.patch"
 	SubjectRelationsPatchDelta  = "relations.patch"
+	SubjectPlayerInjured        = "jugador.lesionado"
+	SubjectPlayerRecovered      = "jugador.recuperado"
 	SubjectGMDecisionRegistered = "decision.gm_registrada"
 )
 
@@ -322,14 +331,89 @@ type RosterStatePatch struct {
 }
 
 type PlayerEmotionalPatch struct {
-	PlayerID         string  `json:"player_id"`
-	EmotionalState   string  `json:"emotional_state"`
-	Satisfaction     float64 `json:"satisfaction"`
-	Loyalty          float64 `json:"loyalty"`
-	Ego              float64 `json:"ego"`
-	CompetitiveDrive float64 `json:"competitive_drive"`
-	CityConnection   float64 `json:"city_connection"`
-	Summary          string  `json:"summary"`
+	PlayerID              string  `json:"player_id"`
+	EmotionalState        string  `json:"emotional_state"`
+	Satisfaction          float64 `json:"satisfaction"`
+	Loyalty               float64 `json:"loyalty"`
+	Ego                   float64 `json:"ego"`
+	CompetitiveDrive      float64 `json:"competitive_drive"`
+	CityConnection        float64 `json:"city_connection"`
+	Summary               string  `json:"summary"`
+	Availability          string  `json:"availability,omitempty"`
+	InjuryID              string  `json:"injury_id,omitempty"`
+	Severity              string  `json:"severity,omitempty"`
+	ExpectedRecoveryDate  string  `json:"expected_recovery_date,omitempty"`
+	EstimatedDaysOut      uint16  `json:"estimated_days_out,omitempty"`
+	AvailabilityChangedOn string  `json:"availability_changed_on,omitempty"`
+}
+
+type PlayerInjuredEvent struct {
+	EventMeta
+	InjuryID             string `json:"injury_id"`
+	PlayerID             string `json:"player_id"`
+	Severity             string `json:"severity"`
+	EstimatedDaysOut     uint16 `json:"estimated_days_out"`
+	InjuredOn            string `json:"injured_on"`
+	ExpectedRecoveryDate string `json:"expected_recovery_date"`
+	Reason               string `json:"reason"`
+	SourceMatchID        string `json:"source_match_id"`
+	WorkloadScore        uint16 `json:"workload_score"`
+}
+
+type PlayerRecoveredEvent struct {
+	EventMeta
+	InjuryID    string `json:"injury_id"`
+	PlayerID    string `json:"player_id"`
+	RecoveredOn string `json:"recovered_on"`
+}
+
+func RosterPatchFromPlayerInjured(event PlayerInjuredEvent) RosterPatchEnvelope {
+	return RosterPatchEnvelope{
+		Type:    SubjectRosterPatchDelta,
+		Subject: SubjectPlayerInjured,
+		GameID:  event.GameID,
+		Patch: RosterStatePatch{
+			SimulatedDate: event.InjuredOn,
+			SourceEventID: event.EventID,
+			SourceSubject: SubjectPlayerInjured,
+			Players: []PlayerEmotionalPatch{
+				{
+					PlayerID:              event.PlayerID,
+					EmotionalState:        "injured",
+					Summary:               "El jugador queda fuera por carga acumulada.",
+					Availability:          "injured",
+					InjuryID:              event.InjuryID,
+					Severity:              event.Severity,
+					ExpectedRecoveryDate:  event.ExpectedRecoveryDate,
+					EstimatedDaysOut:      event.EstimatedDaysOut,
+					AvailabilityChangedOn: event.InjuredOn,
+				},
+			},
+		},
+	}
+}
+
+func RosterPatchFromPlayerRecovered(event PlayerRecoveredEvent) RosterPatchEnvelope {
+	return RosterPatchEnvelope{
+		Type:    SubjectRosterPatchDelta,
+		Subject: SubjectPlayerRecovered,
+		GameID:  event.GameID,
+		Patch: RosterStatePatch{
+			SimulatedDate: event.RecoveredOn,
+			SourceEventID: event.EventID,
+			SourceSubject: SubjectPlayerRecovered,
+			Players: []PlayerEmotionalPatch{
+				{
+					PlayerID:              event.PlayerID,
+					EmotionalState:        "available",
+					Summary:               "El jugador recibe el alta medica y vuelve a estar disponible.",
+					Availability:          "active",
+					InjuryID:              event.InjuryID,
+					AvailabilityChangedOn: event.RecoveredOn,
+				},
+			},
+		},
+	}
 }
 
 type AgentRelationshipChangedEvent struct {

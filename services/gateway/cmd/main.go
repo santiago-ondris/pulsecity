@@ -204,6 +204,30 @@ func main() {
 		log.Fatalf("subscribe roster patch events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectPlayerInjured, func(_ string, data []byte) {
+		var event domain.PlayerInjuredEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode player injured: %v", err)
+			return
+		}
+
+		hub.Broadcast(domain.RosterPatchFromPlayerInjured(event))
+	}); err != nil {
+		log.Fatalf("subscribe player injured events: %v", err)
+	}
+
+	if _, err := bus.Subscribe(domain.SubjectPlayerRecovered, func(_ string, data []byte) {
+		var event domain.PlayerRecoveredEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode player recovered: %v", err)
+			return
+		}
+
+		hub.Broadcast(domain.RosterPatchFromPlayerRecovered(event))
+	}); err != nil {
+		log.Fatalf("subscribe player recovered events: %v", err)
+	}
+
 	if _, err := bus.Subscribe(domain.SubjectChatMessageDelta, func(_ string, data []byte) {
 		var event domain.ChatMessageEnvelope
 		if err := json.Unmarshal(data, &event); err != nil {

@@ -168,6 +168,12 @@ export interface PlayerEmotionalState {
   competitive_drive: number;
   city_connection: number;
   summary: string;
+  availability?: "active" | "injured";
+  injury_id?: string;
+  severity?: "minor" | "moderate" | "major";
+  expected_recovery_date?: string;
+  estimated_days_out?: number;
+  availability_changed_on?: string;
   simulated_date?: string;
   source_event_id?: string;
   source_subject?: string;

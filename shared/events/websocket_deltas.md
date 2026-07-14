@@ -116,12 +116,22 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
         "ego": 0.58,
         "competitive_drive": 0.72,
         "city_connection": 0.38,
+        "availability": "active",
         "summary": "Mateo Cross procesa la victoria con rol alto y 26 puntos."
       }
     ]
   }
 }
 ```
+
+Campos opcionales M3.9 en cada jugador:
+
+- `availability`: `active` o `injured`.
+- `injury_id`
+- `severity`: `minor`, `moderate` o `major`.
+- `expected_recovery_date`
+- `estimated_days_out`
+- `availability_changed_on`
 
 ## `relations.patch`
 

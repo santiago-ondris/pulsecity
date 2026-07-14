@@ -35,3 +35,35 @@ Notas:
 - `payload` debe contener solo el contexto minimo necesario para reconstruir la decision.
 - `gm_decisions_log` es append-only e idempotente por `(game_id, decision_id)`.
 - El log no se expone directamente al frontend; se usara por lecturas agregadas para contexto de agentes.
+
+### `medical_decision`
+
+Publicado por `gateway` cuando el GM responde una recomendacion medica.
+
+```json
+{
+  "event_id": "decision-medical-game-1-injury-game-1-match-004-game-1-player-01",
+  "game_id": "game-1",
+  "occurred_at": "2026-10-28T00:00:04Z",
+  "schema_version": 1,
+  "decision_id": "medical-injury-game-1-match-004-game-1-player-01",
+  "kind": "medical_decision",
+  "payload": {
+    "injury_id": "injury-game-1-match-004-game-1-player-01",
+    "player_id": "game-1-player-01",
+    "choice_id": "force_return",
+    "choice_label": "Forzar alta anticipada"
+  },
+  "simulated_date": "2026-10-30",
+  "agents_affected": ["team_doctor", "strength_conditioning_coach", "head_coach"],
+  "source_event_id": "injury-game-1-match-004-game-1-player-01",
+  "source_subject": "jugador.lesionado"
+}
+```
+
+Opciones validas:
+
+- `rest`
+- `reduce_minutes`
+- `ignore_doctor`
+- `force_return`

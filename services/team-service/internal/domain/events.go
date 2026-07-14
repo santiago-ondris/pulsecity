@@ -6,6 +6,9 @@ const (
 	SubjectMatchStarting    = "partido.iniciando"
 	SubjectMatchFinished    = "partido.terminado"
 	SubjectRosterPatchDelta = "roster.patch"
+	SubjectPlayerInjured    = "jugador.lesionado"
+	SubjectPlayerRecovered  = "jugador.recuperado"
+	SubjectGMDecision       = "decision.gm_registrada"
 	SubjectSeasonPatchDelta = "season.patch"
 	SubjectMatchResultDelta = "match.result"
 )
@@ -48,6 +51,37 @@ type MatchFinishedEvent struct {
 	Seed          uint64           `json:"seed"`
 	BoxScore      []PlayerBoxScore `json:"box_score"`
 	KeyMoments    []KeyMoment      `json:"key_moments"`
+}
+
+type PlayerInjuredEvent struct {
+	EventMeta
+	InjuryID             string `json:"injury_id"`
+	PlayerID             string `json:"player_id"`
+	Severity             string `json:"severity"`
+	EstimatedDaysOut     uint16 `json:"estimated_days_out"`
+	InjuredOn            string `json:"injured_on"`
+	ExpectedRecoveryDate string `json:"expected_recovery_date"`
+	Reason               string `json:"reason"`
+	SourceMatchID        string `json:"source_match_id"`
+	WorkloadScore        uint16 `json:"workload_score"`
+}
+
+type PlayerRecoveredEvent struct {
+	EventMeta
+	InjuryID    string `json:"injury_id"`
+	PlayerID    string `json:"player_id"`
+	RecoveredOn string `json:"recovered_on"`
+}
+
+type GMDecisionRegisteredEvent struct {
+	EventMeta
+	DecisionID     string            `json:"decision_id"`
+	Kind           string            `json:"kind"`
+	Payload        map[string]string `json:"payload"`
+	SimulatedDate  string            `json:"simulated_date"`
+	AgentsAffected []string          `json:"agents_affected"`
+	SourceEventID  string            `json:"source_event_id,omitempty"`
+	SourceSubject  string            `json:"source_subject,omitempty"`
 }
 
 type RosterPatchEnvelope struct {
