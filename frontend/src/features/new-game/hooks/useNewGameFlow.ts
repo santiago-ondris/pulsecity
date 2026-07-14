@@ -5,6 +5,7 @@ import type {
   ChatClientMessages,
   ChatMessageEvent,
   CityClientState,
+  FinanceClientState,
   GameSetup,
   GameSummary,
   GuestSession,
@@ -67,6 +68,21 @@ const initialCityState: CityClientState = {
   loss_streak: 0,
 };
 
+const initialFinanceState: FinanceClientState = {
+  simulated_date: "2026-10-01",
+  source_event_id: "",
+  source_subject: "",
+  cap_base: 0,
+  luxury_tax_line: 0,
+  committed_salary: 0,
+  cap_space: 0,
+  luxury_tax_space: 0,
+  roster_count: 0,
+  status: "under_cap",
+  near_luxury_tax: false,
+  projected_tax_payment: 0,
+};
+
 const initialAgentStates: AgentClientStates = {};
 const initialRosterStates: RosterClientStates = {};
 const initialRelationshipStates: RelationshipClientStates = {};
@@ -88,6 +104,7 @@ export function useNewGameFlow() {
   const [seasonState, setSeasonState] = useState<SeasonClientState>(initialSeasonState);
   const [recentResults, setRecentResults] = useState<SeasonMatchSummary[]>([]);
   const [cityState, setCityState] = useState<CityClientState>(initialCityState);
+  const [financeState, setFinanceState] = useState<FinanceClientState>(initialFinanceState);
   const [agentStates, setAgentStates] = useState<AgentClientStates>(initialAgentStates);
   const [rosterStates, setRosterStates] = useState<RosterClientStates>(initialRosterStates);
   const [relationshipStates, setRelationshipStates] =
@@ -236,6 +253,11 @@ export function useNewGameFlow() {
       if (payload.patch.last_result) {
         setRecentResults((current) => prependMatchResult(current, payload.patch.last_result!));
       }
+      return;
+    }
+
+    if (payload.type === "finance.patch") {
+      setFinanceState(payload.patch);
       return;
     }
 
@@ -625,6 +647,7 @@ export function useNewGameFlow() {
     setTimeState(initialTimeState);
     setSeasonState(initialSeasonState);
     setCityState(initialCityState);
+    setFinanceState(initialFinanceState);
     setAgentStates(initialAgentStates);
     setRosterStates(initialRosterStates);
     setRelationshipStates(initialRelationshipStates);
@@ -1084,6 +1107,7 @@ export function useNewGameFlow() {
     setSeasonState(initialSeasonState);
     setRecentResults([]);
     setCityState(initialCityState);
+    setFinanceState(initialFinanceState);
     setAgentStates(initialAgentStates);
     setRosterStates(initialRosterStates);
     setRelationshipStates(initialRelationshipStates);
@@ -1111,6 +1135,7 @@ export function useNewGameFlow() {
     agentStates,
     draft,
     events,
+    financeState,
     gameId,
     games,
     guestToken,

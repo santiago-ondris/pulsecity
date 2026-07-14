@@ -1,5 +1,6 @@
 import type {
   CityClientState,
+  FinanceClientState,
   MapClientState,
   SeasonClientState,
   SeasonMatchSummary,
@@ -9,6 +10,7 @@ import { formatMatchScore, formatPointDifferential, formatSimulatedDate } from "
 
 interface SeasonPanelProps {
   cityState: CityClientState;
+  financeState: FinanceClientState;
   gameId: string;
   mapState: MapClientState;
   ownerIntroResponseLabel: string | null;
@@ -19,6 +21,7 @@ interface SeasonPanelProps {
 
 export function SeasonPanel({
   cityState,
+  financeState,
   gameId,
   mapState,
   ownerIntroResponseLabel,
@@ -52,6 +55,16 @@ export function SeasonPanel({
       </div>
 
       <div>
+        <p className="eyebrow">Finanzas</p>
+        <div className="ceremony-state-grid">
+          <StateItem label="Salarios" value={formatMoney(financeState.committed_salary)} />
+          <StateItem label="Cap space" value={formatMoney(financeState.cap_space)} />
+          <StateItem label="Luxury tax" value={formatMoney(financeState.luxury_tax_space)} />
+          <StateItem label="Estado" value={formatCapStatus(financeState.status)} />
+        </div>
+      </div>
+
+      <div>
         <p className="eyebrow">Resultados recientes</p>
         <ul className="ceremony-results ceremony-results--tab">
           {recentResults.length === 0 ? (
@@ -73,6 +86,30 @@ export function SeasonPanel({
       </div>
     </section>
   );
+}
+
+function formatCapStatus(status: FinanceClientState["status"]) {
+  switch (status) {
+    case "luxury_tax":
+      return "Luxury tax";
+    case "over_cap":
+      return "Sobre el cap";
+    default:
+      return "Bajo el cap";
+  }
+}
+
+function formatMoney(value: number) {
+  const sign = value < 0 ? "-" : "";
+  const absoluteValue = Math.abs(value);
+
+  if (absoluteValue >= 1_000_000) {
+    const amount = absoluteValue / 1_000_000;
+    const formatted = amount >= 10 ? amount.toFixed(0) : amount.toFixed(1);
+    return `${sign}$${formatted}M`;
+  }
+
+  return `${sign}$${absoluteValue.toLocaleString("en-US")}`;
 }
 
 function StateItem({ label, value }: { label: string; value: string }) {

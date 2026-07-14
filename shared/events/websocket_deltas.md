@@ -9,6 +9,7 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
 - `time.patch`
 - `season.patch`
 - `match.result`
+- `finance.patch`
 - `city.patch`
 - `agent.patch`
 - `roster.patch`
@@ -57,6 +58,29 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
     "away_score": 106,
     "winner_team_id": "pulsecity",
     "key_moments": []
+  }
+}
+```
+
+## `finance.patch`
+
+```json
+{
+  "type": "finance.patch",
+  "game_id": "uuid",
+  "patch": {
+    "simulated_date": "2026-10-22",
+    "source_event_id": "salary-cap-game-1-initial-season-game-1",
+    "source_subject": "salary_cap.calculado",
+    "cap_base": 141000000,
+    "luxury_tax_line": 171000000,
+    "committed_salary": 78500000,
+    "cap_space": 62500000,
+    "luxury_tax_space": 92500000,
+    "roster_count": 15,
+    "status": "under_cap",
+    "near_luxury_tax": false,
+    "projected_tax_payment": 0
   }
 }
 ```

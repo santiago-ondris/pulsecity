@@ -14,6 +14,7 @@ pub const SUBJECT_AGENT_RELATIONSHIP_CHANGED: &str = "agente.relacion_cambio";
 pub const SUBJECT_AGENT_CRITICAL_EVENT: &str = "agente.evento_critico";
 pub const SUBJECT_ROSTER_PATCH: &str = "roster.patch";
 pub const SUBJECT_GM_DECISION_REGISTERED: &str = "decision.gm_registrada";
+pub const SUBJECT_SALARY_CAP_CALCULATED: &str = "salary_cap.calculado";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventMeta {
@@ -189,6 +190,22 @@ pub struct GMDecisionRegisteredEvent {
     pub source_event_id: Option<String>,
     #[serde(default)]
     pub source_subject: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SalaryCapCalculatedEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub simulated_date: String,
+    pub cap_base: i64,
+    pub luxury_tax_line: i64,
+    pub committed_salary: i64,
+    pub cap_space: i64,
+    pub luxury_tax_space: i64,
+    pub roster_count: u8,
+    pub status: String,
+    pub near_luxury_tax: bool,
+    pub projected_tax_payment: i64,
 }
 
 #[cfg(test)]

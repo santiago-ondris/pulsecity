@@ -185,6 +185,7 @@ const (
 	SubjectAgentPatchDelta      = "agent.patch"
 	SubjectRosterPatchDelta     = "roster.patch"
 	SubjectRelationsPatchDelta  = "relations.patch"
+	SubjectFinancePatchDelta    = "finance.patch"
 	SubjectPlayerInjured        = "jugador.lesionado"
 	SubjectPlayerRecovered      = "jugador.recuperado"
 	SubjectGMDecisionRegistered = "decision.gm_registrada"
@@ -250,6 +251,28 @@ type SeasonPatchEnvelope struct {
 	Subject string           `json:"subject"`
 	GameID  string           `json:"game_id"`
 	Patch   SeasonStatePatch `json:"patch"`
+}
+
+type FinancePatchEnvelope struct {
+	Type    string            `json:"type"`
+	Subject string            `json:"subject"`
+	GameID  string            `json:"game_id"`
+	Patch   FinanceStatePatch `json:"patch"`
+}
+
+type FinanceStatePatch struct {
+	SimulatedDate       string `json:"simulated_date"`
+	SourceEventID       string `json:"source_event_id"`
+	SourceSubject       string `json:"source_subject"`
+	CapBase             int    `json:"cap_base"`
+	LuxuryTaxLine       int    `json:"luxury_tax_line"`
+	CommittedSalary     int    `json:"committed_salary"`
+	CapSpace            int    `json:"cap_space"`
+	LuxuryTaxSpace      int    `json:"luxury_tax_space"`
+	RosterCount         uint8  `json:"roster_count"`
+	Status              string `json:"status"`
+	NearLuxuryTax       bool   `json:"near_luxury_tax"`
+	ProjectedTaxPayment int    `json:"projected_tax_payment"`
 }
 
 type SeasonStatePatch struct {

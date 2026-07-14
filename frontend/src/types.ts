@@ -101,6 +101,28 @@ export interface SeasonPatchEnvelope {
   patch: SeasonStatePatch;
 }
 
+export interface FinanceClientState {
+  simulated_date: string;
+  source_event_id: string;
+  source_subject: string;
+  cap_base: number;
+  luxury_tax_line: number;
+  committed_salary: number;
+  cap_space: number;
+  luxury_tax_space: number;
+  roster_count: number;
+  status: "under_cap" | "over_cap" | "luxury_tax";
+  near_luxury_tax: boolean;
+  projected_tax_payment: number;
+}
+
+export interface FinancePatchEnvelope {
+  type: "finance.patch";
+  subject: string;
+  game_id: string;
+  patch: FinanceClientState;
+}
+
 export interface CityClientState {
   fan_sentiment: number;
   ticket_sales_index: number;
@@ -279,6 +301,7 @@ export type RealtimeEvent =
   | MapPatchEnvelope
   | TimePatchEnvelope
   | SeasonPatchEnvelope
+  | FinancePatchEnvelope
   | CityPatchEnvelope
   | AgentPatchEnvelope
   | RosterPatchEnvelope

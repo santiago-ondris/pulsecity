@@ -4,6 +4,7 @@ use crate::events::{
     AgentRelationshipChangedEvent, AgentStateChangedEvent, EventMeta, GMDecisionRegisteredEvent,
     MatchFinishedEvent, PlayerBoxScore, PlayerEmotionalPatch, RosterPatchEnvelope,
     RosterStatePatch, SUBJECT_GM_DECISION_REGISTERED, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
+    SalaryCapCalculatedEvent,
 };
 
 pub const OWN_TEAM_ID: &str = "pulsecity";
@@ -1164,6 +1165,76 @@ pub fn apply_match_finished(
 }
 
 #[must_use]
+pub fn apply_salary_cap_to_core_agents(
+    current_states: Vec<CoreAgentState>,
+    event: &SalaryCapCalculatedEvent,
+    occurred_at: String,
+) -> Vec<AgentStateChange> {
+    let mut changes = Vec::new();
+    for mut state in current_states {
+        match state.agent_id.as_str() {
+            "cfo" => {
+                if event.status == "luxury_tax" {
+                    adjust(&mut state.state, "budget_alert", 0.18);
+                    adjust(&mut state.state, "financial_trust", -0.04);
+                    state.mood = "concerned".to_string();
+                } else if event.near_luxury_tax {
+                    adjust(&mut state.state, "budget_alert", 0.08);
+                    state.mood = "watchful".to_string();
+                } else {
+                    adjust(&mut state.state, "budget_alert", -0.02);
+                    state.mood = "calm".to_string();
+                }
+            }
+            "owner" => {
+                if event.status == "luxury_tax" {
+                    adjust(&mut state.state, "patience_remaining", -0.04);
+                    adjust(&mut state.state, "business_trust", -0.03);
+                    state.mood = "concerned".to_string();
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        }
+
+        changes.push(AgentStateChange {
+            event: AgentStateChangedEvent {
+                meta: EventMeta {
+                    event_id: format!("agent-state-{}-{}", event.meta.event_id, state.agent_id),
+                    game_id: event.meta.game_id.clone(),
+                    occurred_at: occurred_at.clone(),
+                    schema_version: SCHEMA_VERSION,
+                },
+                simulated_date: event.simulated_date.clone(),
+                agent_id: state.agent_id.clone(),
+                mood: state.mood.clone(),
+                state: state.state.clone(),
+                summary: salary_cap_summary(&state.agent_id, event),
+                source_event_id: event.meta.event_id.clone(),
+                source_subject: "salary_cap.calculado".to_string(),
+            },
+            state,
+        });
+    }
+
+    changes
+}
+
+fn salary_cap_summary(agent_id: &str, event: &SalaryCapCalculatedEvent) -> String {
+    match (agent_id, event.status.as_str()) {
+        ("cfo", "luxury_tax") => "El CFO alerta que la nomina entro en luxury tax.".to_string(),
+        ("cfo", _) if event.near_luxury_tax => {
+            "El CFO marca que la franquicia esta cerca de la linea de luxury tax.".to_string()
+        }
+        ("owner", "luxury_tax") => {
+            "El Owner reduce paciencia por el costo proyectado de la nomina.".to_string()
+        }
+        _ => "La situacion financiera se mantiene controlada.".to_string(),
+    }
+}
+
+#[must_use]
 pub fn apply_match_to_player_agents(
     current_states: Vec<PlayerAgentState>,
     event: &MatchFinishedEvent,
@@ -2027,6 +2098,40 @@ mod tests {
             doctor_gm.event.source_subject,
             SUBJECT_GM_DECISION_REGISTERED
         );
+    }
+
+    #[test]
+    fn luxury_tax_moves_cfo_and_owner_state() {
+        let states = vec![
+            default_core_agent_state("game-1", "owner"),
+            default_core_agent_state("game-1", "cfo"),
+        ];
+        let event = SalaryCapCalculatedEvent {
+            meta: EventMeta {
+                event_id: "salary-cap-game-1".to_string(),
+                game_id: "game-1".to_string(),
+                occurred_at: "2026-10-22T00:00:00Z".to_string(),
+                schema_version: SCHEMA_VERSION,
+            },
+            simulated_date: "2026-10-22".to_string(),
+            cap_base: 141_000_000,
+            luxury_tax_line: 171_000_000,
+            committed_salary: 180_000_000,
+            cap_space: -39_000_000,
+            luxury_tax_space: -9_000_000,
+            roster_count: 15,
+            status: "luxury_tax".to_string(),
+            near_luxury_tax: true,
+            projected_tax_payment: 18_000_000,
+        };
+
+        let changes =
+            apply_salary_cap_to_core_agents(states, &event, "2026-10-22T00:00:01Z".to_string());
+        let cfo = state_for(&changes, "cfo");
+        let owner = state_for(&changes, "owner");
+
+        assert!(cfo.state["budget_alert"] > 0.15);
+        assert!(owner.state["patience_remaining"] < 0.75);
     }
 
     #[test]

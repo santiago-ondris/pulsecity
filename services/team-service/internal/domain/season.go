@@ -12,6 +12,8 @@ const (
 	DefaultSeasonStartDate      = "2026-10-22"
 	RegularSeasonGames          = 82
 	OwnTeamID                   = "pulsecity"
+	DefaultCapBase              = 141_000_000
+	DefaultLuxuryTaxLine        = 171_000_000
 )
 
 type GameStartedEvent struct {
@@ -29,6 +31,23 @@ type InitialSeason struct {
 	Schedule  []ScheduledMatch
 }
 
+type SalaryCapSnapshot struct {
+	GameID              string
+	SimulatedDate       string
+	CapBase             int
+	LuxuryTaxLine       int
+	CommittedSalary     int
+	CapSpace            int
+	LuxuryTaxSpace      int
+	RosterCount         uint8
+	Status              string
+	NearLuxuryTax       bool
+	ProjectedTaxPayment int
+	SourceEventID       string
+	SourceSubject       string
+	OccurredAt          string
+}
+
 type RosterPlayer struct {
 	PlayerID      string
 	GameID        string
@@ -39,6 +58,96 @@ type RosterPlayer struct {
 	ContractYears uint8
 	Salary        int
 	SortOrder     int
+}
+
+func CalculateSalaryCap(
+	gameID string,
+	roster []RosterPlayer,
+	simulatedDate string,
+	occurredAt string,
+	sourceEventID string,
+	sourceSubject string,
+) SalaryCapSnapshot {
+	committedSalary := 0
+	rosterCount := 0
+	for _, player := range roster {
+		if player.RosterStatus == "waived" {
+			continue
+		}
+		committedSalary += player.Salary
+		rosterCount++
+	}
+
+	capSpace := DefaultCapBase - committedSalary
+	luxuryTaxSpace := DefaultLuxuryTaxLine - committedSalary
+	status := "under_cap"
+	projectedTaxPayment := 0
+	if committedSalary > DefaultLuxuryTaxLine {
+		status = "luxury_tax"
+		projectedTaxPayment = (committedSalary - DefaultLuxuryTaxLine) * 2
+	} else if committedSalary > DefaultCapBase {
+		status = "over_cap"
+	}
+
+	return SalaryCapSnapshot{
+		GameID:              gameID,
+		SimulatedDate:       simulatedDate,
+		CapBase:             DefaultCapBase,
+		LuxuryTaxLine:       DefaultLuxuryTaxLine,
+		CommittedSalary:     committedSalary,
+		CapSpace:            capSpace,
+		LuxuryTaxSpace:      luxuryTaxSpace,
+		RosterCount:         uint8(rosterCount),
+		Status:              status,
+		NearLuxuryTax:       luxuryTaxSpace <= 10_000_000,
+		ProjectedTaxPayment: projectedTaxPayment,
+		SourceEventID:       sourceEventID,
+		SourceSubject:       sourceSubject,
+		OccurredAt:          occurredAt,
+	}
+}
+
+func (snapshot SalaryCapSnapshot) SalaryCapCalculatedEvent() SalaryCapCalculatedEvent {
+	return SalaryCapCalculatedEvent{
+		EventMeta: EventMeta{
+			EventID:       "salary-cap-" + snapshot.GameID + "-" + snapshot.SourceEventID,
+			GameID:        snapshot.GameID,
+			OccurredAt:    snapshot.OccurredAt,
+			SchemaVersion: 1,
+		},
+		SimulatedDate:       snapshot.SimulatedDate,
+		CapBase:             snapshot.CapBase,
+		LuxuryTaxLine:       snapshot.LuxuryTaxLine,
+		CommittedSalary:     snapshot.CommittedSalary,
+		CapSpace:            snapshot.CapSpace,
+		LuxuryTaxSpace:      snapshot.LuxuryTaxSpace,
+		RosterCount:         snapshot.RosterCount,
+		Status:              snapshot.Status,
+		NearLuxuryTax:       snapshot.NearLuxuryTax,
+		ProjectedTaxPayment: snapshot.ProjectedTaxPayment,
+	}
+}
+
+func FinancePatchFromSalaryCap(event SalaryCapCalculatedEvent) FinancePatchEvent {
+	return FinancePatchEvent{
+		Type:    SubjectFinancePatch,
+		Subject: SubjectFinancePatch,
+		GameID:  event.GameID,
+		Patch: FinanceStatePatch{
+			SimulatedDate:       event.SimulatedDate,
+			SourceEventID:       event.EventID,
+			SourceSubject:       SubjectSalaryCap,
+			CapBase:             event.CapBase,
+			LuxuryTaxLine:       event.LuxuryTaxLine,
+			CommittedSalary:     event.CommittedSalary,
+			CapSpace:            event.CapSpace,
+			LuxuryTaxSpace:      event.LuxuryTaxSpace,
+			RosterCount:         event.RosterCount,
+			Status:              event.Status,
+			NearLuxuryTax:       event.NearLuxuryTax,
+			ProjectedTaxPayment: event.ProjectedTaxPayment,
+		},
+	}
 }
 
 type PlayerMatchState struct {
@@ -405,20 +514,47 @@ func generateRoster(gameID string) []RosterPlayer {
 	players := make([]RosterPlayer, 0, len(templates))
 	for index, template := range templates {
 		variation := uint8(stableHash(gameID, template.name) % 3)
+		overallRating := template.base + variation
+		contractYears := uint8(1 + stableHash(template.name, gameID)%4)
 		players = append(players, RosterPlayer{
 			PlayerID:      fmt.Sprintf("%s-player-%02d", gameID, index+1),
 			GameID:        gameID,
 			FullName:      template.name,
 			Position:      template.position,
-			OverallRating: template.base + variation,
+			OverallRating: overallRating,
 			RosterStatus:  "active",
-			ContractYears: uint8(1 + stableHash(template.name, gameID)%4),
-			Salary:        1_800_000 + int(stableHash(gameID, template.position, template.name)%18)*250_000,
+			ContractYears: contractYears,
+			Salary:        calculatePlayerSalary(overallRating, template.position, contractYears),
 			SortOrder:     index + 1,
 		})
 	}
 
 	return players
+}
+
+func calculatePlayerSalary(overallRating uint8, position string, contractYears uint8) int {
+	baseSalary := 2_000_000
+	switch {
+	case overallRating >= 84:
+		baseSalary = 30_000_000
+	case overallRating >= 81:
+		baseSalary = 23_000_000
+	case overallRating >= 78:
+		baseSalary = 16_000_000
+	case overallRating >= 75:
+		baseSalary = 10_000_000
+	case overallRating >= 72:
+		baseSalary = 5_500_000
+	}
+
+	if position == "PG" || position == "C" {
+		baseSalary += 1_500_000
+	}
+	if contractYears >= 3 && overallRating >= 78 {
+		baseSalary += 2_000_000
+	}
+
+	return baseSalary
 }
 
 func generateOpponents(gameID string) []MatchTeam {

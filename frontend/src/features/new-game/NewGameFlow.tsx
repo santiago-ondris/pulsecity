@@ -101,6 +101,7 @@ export function NewGameFlow() {
         <CeremonyPage
           currentStage={flow.currentStage}
           events={flow.events}
+          financeState={flow.financeState}
           gameId={flow.gameId}
           agentStates={flow.agentStates}
           chatMessages={flow.chatMessages}

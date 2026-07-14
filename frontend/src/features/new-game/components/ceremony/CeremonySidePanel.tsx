@@ -42,6 +42,7 @@ export function CeremonySidePanel({ activeTab, chat, data, setActiveTab }: Cerem
         {activeTab === "season" ? (
           <SeasonPanel
             cityState={data.cityState}
+            financeState={data.financeState}
             gameId={data.gameId}
             mapState={data.mapState}
             ownerIntroResponseLabel={data.ownerIntroResponseLabel}

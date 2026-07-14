@@ -2,6 +2,7 @@ import type {
   AgentClientStates,
   ChatMessageEvent,
   CityClientState,
+  FinanceClientState,
   MapClientState,
   NarrativeEvent,
   RealtimeEvent,
@@ -35,6 +36,7 @@ export interface CeremonySharedProps {
     description: string;
   };
   events: RealtimeEvent[];
+  financeState: FinanceClientState;
   gameId: string;
   mapState: MapClientState;
   narrativeInbox: NarrativeEvent[];

@@ -3,13 +3,13 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::{
     agents::{
-        AgentRelationship, AgentRelationshipChange, CoreAgentState, IndividualAgentState,
-        MatchAgentReactions, PlayerAgentState, TeamRosterPlayer,
+        AgentRelationship, AgentRelationshipChange, AgentStateChange, CoreAgentState,
+        IndividualAgentState, MatchAgentReactions, PlayerAgentState, TeamRosterPlayer,
         apply_gm_decision_to_relationships, apply_match_finished, apply_match_to_player_agents,
-        apply_match_to_relationships, default_agent_relationships, default_core_agent_state,
-        default_individual_agent_states, default_player_agent_state,
+        apply_match_to_relationships, apply_salary_cap_to_core_agents, default_agent_relationships,
+        default_core_agent_state, default_individual_agent_states, default_player_agent_state,
     },
-    events::{GMDecisionRegisteredEvent, MatchFinishedEvent},
+    events::{GMDecisionRegisteredEvent, MatchFinishedEvent, SalaryCapCalculatedEvent},
     simulation::SimulationState,
 };
 
@@ -435,6 +435,57 @@ ON CONFLICT DO NOTHING;
             .with_context(|| "commit gm decision relationship reaction")?;
 
         Ok(persisted_changes)
+    }
+
+    pub async fn apply_salary_cap_calculated(
+        &mut self,
+        event: &SalaryCapCalculatedEvent,
+        occurred_at: String,
+    ) -> Result<Vec<AgentStateChange>> {
+        let transaction = self
+            .client
+            .transaction()
+            .await
+            .with_context(|| "begin salary cap agent reaction")?;
+
+        let processed = transaction
+            .execute(
+                "
+INSERT INTO agent_processed_matches (game_id, match_id, source_event_id, processed_at)
+VALUES ($1, $2, $3, NOW())
+ON CONFLICT (game_id, match_id) DO NOTHING;
+",
+                &[
+                    &event.meta.game_id,
+                    &format!("salary-cap-{}", event.meta.event_id),
+                    &event.meta.event_id,
+                ],
+            )
+            .await
+            .with_context(|| "mark salary cap agent reaction processed")?;
+        if processed == 0 {
+            transaction
+                .rollback()
+                .await
+                .with_context(|| "rollback already processed salary cap reaction")?;
+            return Ok(Vec::new());
+        }
+
+        let current_states = vec![
+            load_core_agent_state(&transaction, &event.meta.game_id, "owner").await?,
+            load_core_agent_state(&transaction, &event.meta.game_id, "cfo").await?,
+        ];
+        let changes = apply_salary_cap_to_core_agents(current_states, event, occurred_at);
+        for change in &changes {
+            save_core_agent_state(&transaction, &change.state).await?;
+        }
+
+        transaction
+            .commit()
+            .await
+            .with_context(|| "commit salary cap agent reaction")?;
+
+        Ok(changes)
     }
 
     pub async fn latest_gm_decisions(

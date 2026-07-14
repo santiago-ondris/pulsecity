@@ -5,6 +5,7 @@ import type {
   AgentClientStates,
   ChatClientMessages,
   CityClientState,
+  FinanceClientState,
   MapClientState,
   NarrativeEvent,
   RealtimeEvent,
@@ -26,6 +27,7 @@ interface CeremonyPageProps {
     description: string;
   };
   events: RealtimeEvent[];
+  financeState: FinanceClientState;
   gameId: string;
   agentStates: AgentClientStates;
   chatMessages: ChatClientMessages;
@@ -59,6 +61,7 @@ export function CeremonyPage(props: CeremonyPageProps) {
     cityState: props.cityState,
     currentStage: props.currentStage,
     events: props.events,
+    financeState: props.financeState,
     gameId: props.gameId,
     mapState: props.mapState,
     narrativeInbox: props.narrativeInbox,

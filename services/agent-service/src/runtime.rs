@@ -15,9 +15,9 @@ use crate::{
         MatchFinishedEvent, PauseChangedEvent, SUBJECT_AGENT_RELATIONSHIP_CHANGED,
         SUBJECT_AGENT_STATE_CHANGED, SUBJECT_GM_DECISION_REGISTERED,
         SUBJECT_MAP_GENERATION_STARTED, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
-        SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED, SUBJECT_TIME_SESSION_ENDED,
-        SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED, SessionEndedEvent,
-        SessionStartedEvent, SpeedChangedEvent,
+        SUBJECT_SALARY_CAP_CALCULATED, SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED,
+        SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED,
+        SalaryCapCalculatedEvent, SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
     },
     persistence::Store,
     simulation::{SimulationAccumulator, SimulationState, advance_simulated_date},
@@ -69,6 +69,10 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
         .subscribe(SUBJECT_GM_DECISION_REGISTERED)
         .await
         .context("subscribe decision.gm_registrada")?;
+    let mut salary_cap_calculated = client
+        .subscribe(SUBJECT_SALARY_CAP_CALCULATED)
+        .await
+        .context("subscribe salary_cap.calculado")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -163,6 +167,14 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
 
                 process_gm_decision_registered(&client, &mut store, &event).await?;
             }
+            Some(message) = salary_cap_calculated.next() => {
+                let event = match decode_event::<SalaryCapCalculatedEvent>(SUBJECT_SALARY_CAP_CALCULATED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                process_salary_cap_calculated(&client, &mut store, &event).await?;
+            }
         }
     }
 
@@ -202,6 +214,10 @@ pub async fn run_for_game(
         .subscribe(SUBJECT_GM_DECISION_REGISTERED)
         .await
         .context("subscribe decision.gm_registrada")?;
+    let mut salary_cap_calculated = client
+        .subscribe(SUBJECT_SALARY_CAP_CALCULATED)
+        .await
+        .context("subscribe salary_cap.calculado")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -313,6 +329,17 @@ pub async fn run_for_game(
                 }
 
                 process_gm_decision_registered(&client, &mut store, &event).await?;
+            }
+            Some(message) = salary_cap_calculated.next() => {
+                let event = match decode_event::<SalaryCapCalculatedEvent>(SUBJECT_SALARY_CAP_CALCULATED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+                if event.meta.game_id != state.game_id {
+                    continue;
+                }
+
+                process_salary_cap_calculated(&client, &mut store, &event).await?;
             }
         }
     }
@@ -427,6 +454,27 @@ async fn process_gm_decision_registered(
             .publish(SUBJECT_AGENT_RELATIONSHIP_CHANGED, payload.into())
             .await
             .context("publish agente.relacion_cambio from gm decision")?;
+    }
+
+    Ok(())
+}
+
+async fn process_salary_cap_calculated(
+    client: &Client,
+    store: &mut Store,
+    event: &SalaryCapCalculatedEvent,
+) -> Result<()> {
+    let changes = store
+        .apply_salary_cap_calculated(event, now_rfc3339())
+        .await
+        .with_context(|| format!("apply salary cap reactions game={}", event.meta.game_id))?;
+    for change in changes {
+        let payload = serde_json::to_vec(&change.event)
+            .context("encode agente.estado_cambio from salary cap")?;
+        client
+            .publish(SUBJECT_AGENT_STATE_CHANGED, payload.into())
+            .await
+            .context("publish agente.estado_cambio from salary cap")?;
     }
 
     Ok(())

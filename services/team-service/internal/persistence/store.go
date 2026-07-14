@@ -168,6 +168,23 @@ CREATE TABLE IF NOT EXISTS team_records (
 	last_match_id TEXT,
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS team_salary_cap (
+	game_id TEXT PRIMARY KEY,
+	simulated_date TEXT NOT NULL,
+	cap_base INTEGER NOT NULL,
+	luxury_tax_line INTEGER NOT NULL,
+	committed_salary INTEGER NOT NULL,
+	cap_space INTEGER NOT NULL,
+	luxury_tax_space INTEGER NOT NULL,
+	roster_count SMALLINT NOT NULL,
+	status TEXT NOT NULL,
+	near_luxury_tax BOOLEAN NOT NULL,
+	projected_tax_payment INTEGER NOT NULL,
+	source_event_id TEXT NOT NULL,
+	source_subject TEXT NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `
 
 	_, err := s.pool.Exec(ctx, query)
@@ -271,8 +288,49 @@ ON CONFLICT (game_id) DO NOTHING;
 		return fmt.Errorf("initialize team record: %w", err)
 	}
 
+	salaryCap := domain.CalculateSalaryCap(
+		season.GameID,
+		season.Roster,
+		domain.DefaultSeasonStartDate,
+		"",
+		"initial-season-"+season.GameID,
+		domain.SubjectMapGenerationStarted,
+	)
+	if err := saveSalaryCap(ctx, tx, salaryCap); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit save initial season: %w", err)
+	}
+
+	return nil
+}
+
+func saveSalaryCap(ctx context.Context, q queryer, snapshot domain.SalaryCapSnapshot) error {
+	if _, err := q.Exec(ctx, `
+INSERT INTO team_salary_cap (
+	game_id, simulated_date, cap_base, luxury_tax_line, committed_salary, cap_space,
+	luxury_tax_space, roster_count, status, near_luxury_tax, projected_tax_payment,
+	source_event_id, source_subject, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+ON CONFLICT (game_id) DO UPDATE SET
+	simulated_date = EXCLUDED.simulated_date,
+	cap_base = EXCLUDED.cap_base,
+	luxury_tax_line = EXCLUDED.luxury_tax_line,
+	committed_salary = EXCLUDED.committed_salary,
+	cap_space = EXCLUDED.cap_space,
+	luxury_tax_space = EXCLUDED.luxury_tax_space,
+	roster_count = EXCLUDED.roster_count,
+	status = EXCLUDED.status,
+	near_luxury_tax = EXCLUDED.near_luxury_tax,
+	projected_tax_payment = EXCLUDED.projected_tax_payment,
+	source_event_id = EXCLUDED.source_event_id,
+	source_subject = EXCLUDED.source_subject,
+	updated_at = NOW();
+`, snapshot.GameID, snapshot.SimulatedDate, snapshot.CapBase, snapshot.LuxuryTaxLine, snapshot.CommittedSalary, snapshot.CapSpace, snapshot.LuxuryTaxSpace, int16(snapshot.RosterCount), snapshot.Status, snapshot.NearLuxuryTax, snapshot.ProjectedTaxPayment, snapshot.SourceEventID, snapshot.SourceSubject); err != nil {
+		return fmt.Errorf("save salary cap %s: %w", snapshot.GameID, err)
 	}
 
 	return nil

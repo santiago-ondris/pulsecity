@@ -94,6 +94,10 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return `${event.patch.wins ?? 0}-${event.patch.losses ?? 0}`;
   }
 
+  if (event.type === "finance.patch") {
+    return `Cap ${event.patch.status}: ${event.patch.committed_salary}`;
+  }
+
   if (event.type === "city.patch") {
     return event.patch.reason ?? "Pulso urbano actualizado";
   }

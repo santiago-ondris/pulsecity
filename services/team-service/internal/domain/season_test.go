@@ -59,6 +59,33 @@ func TestGenerateInitialSeasonIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestGenerateInitialSeasonCreatesCapRelevantSalaries(t *testing.T) {
+	season, err := GenerateInitialSeason(GameStartedEvent{
+		GameID:        "game-1",
+		FranchiseName: "Lighthouses",
+		Abbreviation:  "LHT",
+	})
+	if err != nil {
+		t.Fatalf("GenerateInitialSeason() error = %v, want nil", err)
+	}
+
+	cap := CalculateSalaryCap(
+		season.GameID,
+		season.Roster,
+		DefaultSeasonStartDate,
+		"2026-10-22T00:00:00Z",
+		"source-1",
+		"test",
+	)
+
+	if cap.CommittedSalary <= DefaultCapBase {
+		t.Fatalf("initial committed salary = %d, want over cap base %d", cap.CommittedSalary, DefaultCapBase)
+	}
+	if cap.CommittedSalary >= DefaultLuxuryTaxLine {
+		t.Fatalf("initial committed salary = %d, want below luxury tax line %d", cap.CommittedSalary, DefaultLuxuryTaxLine)
+	}
+}
+
 func TestGenerateInitialSeasonRequiresGameID(t *testing.T) {
 	if _, err := GenerateInitialSeason(GameStartedEvent{}); err == nil {
 		t.Fatal("GenerateInitialSeason(empty) error = nil, want error")
@@ -283,6 +310,58 @@ func TestAssessInjuryRiskIgnoresOpponentPlayers(t *testing.T) {
 	}
 	if injured {
 		t.Fatal("AssessInjuryRisk(opponent) injured = true, want false")
+	}
+}
+
+func TestCalculateSalaryCapUnderCap(t *testing.T) {
+	roster := []RosterPlayer{
+		{PlayerID: "p1", Salary: 10_000_000, RosterStatus: "active"},
+		{PlayerID: "p2", Salary: 8_000_000, RosterStatus: "injured"},
+	}
+
+	snapshot := CalculateSalaryCap(
+		"game-1",
+		roster,
+		"2026-10-22",
+		"2026-10-22T00:00:00Z",
+		"source-1",
+		"test",
+	)
+
+	if snapshot.CommittedSalary != 18_000_000 {
+		t.Fatalf("CalculateSalaryCap() committed salary = %d, want 18000000", snapshot.CommittedSalary)
+	}
+	if snapshot.Status != "under_cap" {
+		t.Fatalf("CalculateSalaryCap() status = %q, want under_cap", snapshot.Status)
+	}
+	if snapshot.RosterCount != 2 {
+		t.Fatalf("CalculateSalaryCap() roster count = %d, want 2", snapshot.RosterCount)
+	}
+}
+
+func TestCalculateSalaryCapLuxuryTax(t *testing.T) {
+	roster := []RosterPlayer{
+		{PlayerID: "p1", Salary: 120_000_000, RosterStatus: "active"},
+		{PlayerID: "p2", Salary: 60_000_000, RosterStatus: "active"},
+	}
+
+	snapshot := CalculateSalaryCap(
+		"game-1",
+		roster,
+		"2026-10-22",
+		"2026-10-22T00:00:00Z",
+		"source-1",
+		"test",
+	)
+
+	if snapshot.Status != "luxury_tax" {
+		t.Fatalf("CalculateSalaryCap() status = %q, want luxury_tax", snapshot.Status)
+	}
+	if !snapshot.NearLuxuryTax {
+		t.Fatal("CalculateSalaryCap() near luxury tax = false, want true")
+	}
+	if snapshot.ProjectedTaxPayment != 18_000_000 {
+		t.Fatalf("CalculateSalaryCap() projected tax = %d, want 18000000", snapshot.ProjectedTaxPayment)
 	}
 }
 

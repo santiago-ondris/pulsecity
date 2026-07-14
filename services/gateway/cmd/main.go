@@ -156,6 +156,18 @@ func main() {
 		log.Fatalf("subscribe season patch events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectFinancePatchDelta, func(_ string, data []byte) {
+		var event domain.FinancePatchEnvelope
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode finance patch: %v", err)
+			return
+		}
+
+		hub.Broadcast(event)
+	}); err != nil {
+		log.Fatalf("subscribe finance patch events: %v", err)
+	}
+
 	if _, err := bus.Subscribe(domain.SubjectCityPatchDelta, func(_ string, data []byte) {
 		var event domain.CityPatchEnvelope
 		if err := json.Unmarshal(data, &event); err != nil {

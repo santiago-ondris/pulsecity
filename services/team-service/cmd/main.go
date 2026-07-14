@@ -57,6 +57,22 @@ func run() error {
 			log.Printf("save initial season %s: %v", event.GameID, err)
 			return
 		}
+		salaryCap := domain.CalculateSalaryCap(
+			season.GameID,
+			season.Roster,
+			domain.DefaultSeasonStartDate,
+			time.Now().UTC().Format(time.RFC3339),
+			"initial-season-"+season.GameID,
+			domain.SubjectMapGenerationStarted,
+		).SalaryCapCalculatedEvent()
+		if err := bus.PublishJSON(domain.SubjectSalaryCap, salaryCap); err != nil {
+			log.Printf("publish salary cap game=%s: %v", season.GameID, err)
+			return
+		}
+		if err := bus.PublishJSON(domain.SubjectFinancePatch, domain.FinancePatchFromSalaryCap(salaryCap)); err != nil {
+			log.Printf("publish finance patch game=%s: %v", season.GameID, err)
+			return
+		}
 
 		log.Printf("initial season ready game=%s roster=%d opponents=%d schedule=%d", season.GameID, len(season.Roster), len(season.Opponents), len(season.Schedule))
 	}); err != nil {
