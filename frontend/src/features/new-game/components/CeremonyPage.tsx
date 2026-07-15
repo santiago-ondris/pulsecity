@@ -43,6 +43,7 @@ interface CeremonyPageProps {
   timeState: TimeClientState;
   onSetPaused: (paused: boolean) => void;
   onSetSpeed: (speed: 1 | 5 | 20) => void;
+  onOpenTradeCenter: () => void;
   onSendAgentChatMessage: (agentId: string, message: string, conversationId?: string) => Promise<string>;
 }
 
@@ -94,6 +95,7 @@ export function CeremonyPage(props: CeremonyPageProps) {
 
       <CeremonyTopbar
         data={sharedData}
+        onOpenTradeCenter={props.onOpenTradeCenter}
         onSetPaused={props.onSetPaused}
         onSetSpeed={props.onSetSpeed}
       />

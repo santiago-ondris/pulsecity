@@ -7,6 +7,7 @@ import { ScenarioPage } from "./components/ScenarioPage";
 import { ManagementPage } from "./components/ManagementPage";
 import { LaunchPage } from "./components/LaunchPage";
 import { CeremonyPage } from "./components/CeremonyPage";
+import { TradeCenterPage } from "./components/trades/TradeCenterPage";
 import { OwnerIntroModal } from "./components/OwnerIntroModal";
 import { useNewGameFlow } from "./hooks/useNewGameFlow";
 
@@ -116,9 +117,26 @@ export function NewGameFlow() {
           status={flow.status}
           timeState={flow.timeState}
           onSetPaused={(paused) => void flow.updateTimeControl({ paused })}
+          onOpenTradeCenter={flow.openTradeCenter}
           onSendAgentChatMessage={(agentId, message, conversationId) =>
             flow.sendAgentChatMessage(agentId, message, conversationId)}
           onSetSpeed={(speed) => void flow.updateTimeControl({ speed, paused: false })}
+        />
+      ) : null}
+
+      {flow.currentPage === "trade-center" ? (
+        <TradeCenterPage
+          acceptingProposalIds={flow.tradeAcceptingProposalIds}
+          error={flow.tradeError}
+          financeState={flow.financeState}
+          gameId={flow.gameId}
+          rosterStates={flow.rosterStates}
+          submittingProposal={flow.tradeSubmittingProposal}
+          timeState={flow.timeState}
+          trades={flow.trades}
+          onAcceptTrade={flow.acceptTrade}
+          onBack={flow.goBack}
+          onProposeTrade={flow.proposeTrade}
         />
       ) : null}
 

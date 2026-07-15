@@ -2779,6 +2779,27 @@
   margin-top: 3px;
 }
 
+.ceremony-command-topbar__workspace {
+  min-height: 28px;
+  margin-top: 8px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-component);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ceremony-command-topbar__workspace:hover,
+.ceremony-command-topbar__workspace:focus-visible {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
 .ceremony-command-topbar__metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

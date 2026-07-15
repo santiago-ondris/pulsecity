@@ -32,6 +32,7 @@ import {
   type ScenarioId,
 } from "../constants";
 import type { NewGameDraft } from "../types";
+import { useTradeOperations } from "../trades/useTradeOperations";
 
 const gatewayBaseUrl = "http://localhost:8080";
 const socketBaseUrl = "ws://localhost:8080/ws";
@@ -127,6 +128,16 @@ export function useNewGameFlow() {
     : guestToken
       ? "guest"
       : "none";
+
+  const tradeOperations = useTradeOperations({
+    activeAuthKind,
+    gameId,
+    gatewayBaseUrl,
+    guestToken,
+    sessionToken: userSession?.session_token,
+    simulatedDate: timeState.simulated_date,
+    onStatusChange: setStatus,
+  });
 
   const syncPage = useCallback((nextPage: FlowPage, replace = false) => {
     if (replace) {
@@ -333,6 +344,12 @@ export function useNewGameFlow() {
       return;
     }
 
+    if (payload.type === "trade.patch") {
+      tradeOperations.applyTradePatch(payload);
+      setStatus(payload.patch.detail ?? `Negociación actualizada: ${payload.patch.status}.`);
+      return;
+    }
+
     setMapState((current) => ({
       ...current,
       game_id: payload.game_id,
@@ -342,7 +359,7 @@ export function useNewGameFlow() {
       map_data: payload.patch.map_data ?? current.map_data,
       stadium: payload.patch.stadium ?? current.stadium,
     }));
-  }, [ownerIntroResponse]);
+  }, [ownerIntroResponse, tradeOperations.applyTradePatch]);
 
   const connectSocket = useCallback((nextGameId: string) => {
     socketRef.current?.close();
@@ -403,6 +420,9 @@ export function useNewGameFlow() {
 
   function goBack() {
     switch (currentPage) {
+      case "trade-center":
+        syncPage("ceremony");
+        return;
       case "scenario":
         syncPage("identity");
         return;
@@ -415,6 +435,16 @@ export function useNewGameFlow() {
       default:
         syncPage("home");
     }
+  }
+
+  function openTradeCenter() {
+    if (!gameId) {
+      setStatus("Necesitás una partida activa para abrir el Trade Center.");
+      return;
+    }
+
+    setUnlockedPage("trade-center");
+    syncPage("trade-center");
   }
 
   function completeIdentityStep() {
@@ -1153,6 +1183,10 @@ export function useNewGameFlow() {
     status,
     submittingNarrativeChoice,
     timeState,
+    tradeAcceptingProposalIds: tradeOperations.acceptingProposalIds,
+    tradeError: tradeOperations.error,
+    trades: tradeOperations.trades,
+    tradeSubmittingProposal: tradeOperations.submittingProposal,
     userSession,
     updateDraft,
     continueSelectedGame,
@@ -1165,6 +1199,7 @@ export function useNewGameFlow() {
     completeScenarioStep,
     forgotPassword,
     goBack,
+    openTradeCenter,
     login,
     logoutUser,
     register,
@@ -1174,6 +1209,8 @@ export function useNewGameFlow() {
     submitOwnerIntroChoice,
     updateTimeControl,
     sendAgentChatMessage,
+    proposeTrade: tradeOperations.proposeTrade,
+    acceptTrade: tradeOperations.acceptTrade,
   };
 }
 

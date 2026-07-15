@@ -6,16 +6,20 @@ interface CeremonyTopbarProps {
     CeremonySharedProps,
     "currentStage" | "mapState" | "seasonState" | "socketStatus" | "timeState"
   >;
+  onOpenTradeCenter: () => void;
   onSetPaused: (paused: boolean) => void;
   onSetSpeed: (speed: 1 | 5 | 20) => void;
 }
 
-export function CeremonyTopbar({ data, onSetPaused, onSetSpeed }: CeremonyTopbarProps) {
+export function CeremonyTopbar({ data, onOpenTradeCenter, onSetPaused, onSetSpeed }: CeremonyTopbarProps) {
   return (
     <header className="ceremony-builder__topbar ceremony-command-topbar">
       <div className="ceremony-command-topbar__stage">
         <p className="eyebrow">Command center</p>
         <strong>{data.currentStage.label}</strong>
+        <button type="button" className="ceremony-command-topbar__workspace" onClick={onOpenTradeCenter}>
+          Abrir Trade Center
+        </button>
       </div>
 
       <div className="ceremony-command-topbar__metrics" aria-label="Estado principal de la partida">

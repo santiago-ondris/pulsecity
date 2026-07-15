@@ -1,0 +1,581 @@
+.trade-center {
+  position: relative;
+  min-height: 100svh;
+  padding: 22px clamp(18px, 3vw, 36px) 36px;
+  overflow: hidden;
+  color: var(--text-primary);
+}
+
+.trade-center__image,
+.trade-center__shade {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.trade-center__image {
+  background: var(--trade-center-backdrop) center / cover no-repeat;
+  filter: saturate(0.72) contrast(1.08);
+}
+
+.trade-center__shade {
+  background: rgba(5, 8, 10, 0.9);
+}
+
+.trade-center__topbar,
+.trade-center__workspace {
+  position: relative;
+  z-index: 1;
+  width: min(1360px, 100%);
+  margin: 0 auto;
+}
+
+.trade-center__topbar {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.75fr) minmax(240px, 0.9fr) minmax(420px, 1.6fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.trade-center__back,
+.trade-center__identity,
+.trade-center__context {
+  min-height: 68px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(17, 17, 19, 0.88);
+}
+
+.trade-center__back {
+  padding: 12px 16px;
+  color: rgba(240, 240, 240, 0.76);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease-out, color 100ms ease-out, background 100ms ease-out;
+}
+
+.trade-center__back:hover,
+.trade-center__back:focus-visible {
+  border-color: var(--accent-primary-border);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  outline: none;
+}
+
+.trade-center__identity {
+  display: grid;
+  align-content: center;
+  padding: 12px 16px;
+}
+
+.trade-center__identity strong {
+  margin-top: 2px;
+  font-family: var(--font-display);
+  font-size: 23px;
+  line-height: 1;
+}
+
+.trade-center__context {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trade-center__context > span {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.trade-center__context > span:last-child {
+  border-right: 0;
+}
+
+.trade-center__context small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trade-center__context strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-center__workspace {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(480px, 1.2fr);
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.trade-desk,
+.trade-ledger {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(17, 17, 19, 0.92);
+}
+
+.trade-desk {
+  align-self: start;
+  padding: clamp(20px, 3vw, 30px);
+}
+
+.trade-center__section-heading h1,
+.trade-ledger__header h2 {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  line-height: 1.05;
+}
+
+.trade-center__section-heading h1 {
+  font-size: clamp(30px, 4vw, 42px);
+}
+
+.trade-center__section-heading > p:last-child {
+  max-width: 55ch;
+  margin: 10px 0 0;
+  color: rgba(240, 240, 240, 0.62);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.trade-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 26px;
+}
+
+.trade-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.trade-form label > span {
+  color: rgba(240, 240, 240, 0.64);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trade-form select,
+.trade-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+.trade-form select:focus,
+.trade-form input:focus {
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary-bg);
+  outline-offset: 1px;
+}
+
+.trade-form select:disabled,
+.trade-form input:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.trade-form label small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.trade-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.trade-form__salary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-component);
+  background: var(--bg-elevated);
+}
+
+.trade-form__salary:focus-within {
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary-bg);
+  outline-offset: 1px;
+}
+
+.trade-form__salary span {
+  padding: 0 12px;
+  color: rgba(240, 240, 240, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trade-form__salary input {
+  min-height: 42px;
+  border: 0;
+  padding-inline: 0;
+}
+
+.trade-form__salary input:focus {
+  outline: 0;
+}
+
+.trade-form__error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(224, 85, 85, 0.25);
+  border-radius: var(--radius-component);
+  background: rgba(224, 85, 85, 0.1);
+  color: var(--semantic-negative);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.trade-form__submit,
+.trade-negotiation__counter button {
+  min-height: 44px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-component);
+  background: var(--accent-primary);
+  color: #07110e;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: filter 100ms ease-out, transform 100ms ease-out;
+}
+
+.trade-form__submit:hover,
+.trade-negotiation__counter button:hover {
+  filter: brightness(1.08);
+}
+
+.trade-form__submit:active,
+.trade-negotiation__counter button:active {
+  transform: scale(0.97);
+}
+
+.trade-form__submit:focus-visible,
+.trade-negotiation__counter button:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+.trade-form__submit:disabled,
+.trade-negotiation__counter button:disabled {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--text-disabled);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  filter: none;
+}
+
+.trade-ledger {
+  min-height: calc(100svh - 120px);
+  padding: 20px;
+}
+
+.trade-ledger__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.trade-ledger__header h2 {
+  font-size: 28px;
+}
+
+.trade-ledger__header > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trade-ledger__list {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.trade-ledger__empty {
+  display: grid;
+  place-content: center;
+  min-height: 260px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-panel);
+  text-align: center;
+}
+
+.trade-ledger__empty strong {
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.trade-ledger__empty p {
+  max-width: 44ch;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trade-negotiation {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 3px solid var(--semantic-info);
+  border-radius: var(--radius-panel);
+  background: var(--bg-elevated);
+  animation: trade-entry 150ms ease-out both;
+}
+
+.trade-negotiation--countered {
+  border-left-color: var(--semantic-warning);
+}
+
+.trade-negotiation--rejected {
+  border-left-color: var(--semantic-negative);
+}
+
+.trade-negotiation--accepted {
+  border-left-color: var(--accent-primary);
+}
+
+.trade-negotiation__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.trade-negotiation__header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.trade-negotiation__header > div span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trade-negotiation__header > div strong {
+  font-size: 14px;
+}
+
+.trade-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid rgba(123, 140, 222, 0.25);
+  border-radius: var(--radius-component);
+  background: rgba(123, 140, 222, 0.1);
+  color: var(--semantic-info);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trade-status--countered {
+  border-color: rgba(255, 170, 0, 0.25);
+  background: rgba(255, 170, 0, 0.1);
+  color: var(--semantic-warning);
+}
+
+.trade-status--rejected {
+  border-color: rgba(224, 85, 85, 0.25);
+  background: rgba(224, 85, 85, 0.1);
+  color: var(--semantic-negative);
+}
+
+.trade-status--accepted {
+  border-color: var(--accent-primary-border);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+}
+
+.trade-negotiation__detail {
+  margin: 13px 0;
+  color: rgba(240, 240, 240, 0.72);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trade-negotiation__terms {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-component);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.trade-negotiation__terms div {
+  min-width: 0;
+  padding: 9px;
+  background: #151518;
+}
+
+.trade-negotiation__terms dt {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trade-negotiation__terms dd {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-negotiation__counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 170, 0, 0.2);
+  border-radius: var(--radius-component);
+  background: rgba(255, 170, 0, 0.08);
+}
+
+.trade-negotiation__counter p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  color: var(--semantic-warning);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trade-negotiation__counter p strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.trade-negotiation__counter button {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
+.trade-negotiation__result {
+  margin: 12px 0 0;
+  color: var(--accent-primary);
+  font-size: 12px;
+}
+
+@keyframes trade-entry {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1020px) {
+  .trade-center__topbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .trade-center__context {
+    grid-column: 1 / -1;
+  }
+
+  .trade-center__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-ledger {
+    min-height: 460px;
+  }
+}
+
+@media (max-width: 640px) {
+  .trade-center {
+    padding: 14px 12px 24px;
+  }
+
+  .trade-center__topbar,
+  .trade-center__context,
+  .trade-form__row,
+  .trade-negotiation__terms {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-center__context > span {
+    min-height: 54px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .trade-center__context > span:last-child {
+    border-bottom: 0;
+  }
+
+  .trade-form select,
+  .trade-form input {
+    font-size: 16px;
+  }
+
+  .trade-ledger__header,
+  .trade-negotiation__counter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .trade-negotiation__terms {
+    gap: 1px;
+  }
+
+  .trade-negotiation__terms div {
+    min-height: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trade-negotiation {
+    animation: none;
+  }
+
+  .trade-form__submit,
+  .trade-negotiation__counter button {
+    transition: none;
+  }
+}

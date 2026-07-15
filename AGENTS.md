@@ -175,6 +175,20 @@ Contexto: esta regla nace de la pausa de análisis del 15 de julio de 2026 (ver 
 
 Todo mini milestone que agregue una mecánica nueva incluye en su criterio de done "operable desde el frontend, aunque sea mínimo" (calidad debug aceptable). Los tests unitarios validan correctitud, no game feel: un sistema que nadie jugó no está terminado. Regla vigente desde la pausa de análisis del 15 de julio de 2026.
 
+### 9. Las mecánicas principales viven en páginas propias
+
+El frontend no concentra todas las mecánicas en una sola pantalla ni convierte la página principal en una acumulación de pestañas, modales y paneles. La pantalla principal funciona como Command Center: resume el estado y ofrece accesos claros. Cada dominio jugable con flujo propio (trades, centro médico, roster, finanzas, calendario, playoffs, etc.) debe evolucionar hacia una página o espacio de trabajo propio cuando su tarea requiera contexto, varias decisiones o seguimiento.
+
+Reglas:
+
+- una página tiene un propósito dominante que se entiende en menos de 3 segundos
+- el Command Center resume y navega; no absorbe la implementación completa de cada dominio
+- no esconder mecánicas principales en modales ni agregarlas como otra pestaña por conveniencia técnica
+- cada espacio de trabajo tiene entrada visible, contexto de partida y retorno claro
+- en mobile se conserva la misma jerarquía; no se apilan todos los paneles de desktop en una página interminable
+
+Contexto: esta regla nace en `M3.P1`, al comprobar que acumular agentes, inbox, temporada, sistema y nuevas operaciones en una sola página produjo desorientación y errores de UX/UI. `Trade Center` es el primer corte que aplica formalmente esta navegación por dominios.
+
 ---
 
 ## Modelo de tiempo simulado

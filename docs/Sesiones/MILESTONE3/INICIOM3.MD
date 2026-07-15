@@ -891,6 +891,28 @@ Done:
 - fricciones y sensaciones documentadas en nota de `02_Progress/`: ¿se entiende el estado del trade? ¿la respuesta del rival se siente coherente con su perfil? ¿la decision medica tiene peso?
 - lo aprendido queda registrado como input de diseño para `M3.13`
 
+Avance 2026-07-15 — M3.P1a — Trade Center jugable — YA REALIZADO:
+
+- se decide que las mecanicas principales no se acumulan en una sola pagina; el Command Center resume y navega, mientras cada dominio con flujo propio vive en una pagina o espacio de trabajo propio
+- la regla queda registrada de forma permanente en `AGENTS.md`
+- se agrega ruta `/franchise/trades` y pagina independiente `TradeCenterPage`
+- el Command Center incorpora un acceso visible al Trade Center y la pagina ofrece retorno explicito
+- se agrega formulario de propuesta con jugador propio, franquicia rival, posicion solicitada e incoming salary
+- se materializa el catalogo canonico de 30 franquicias y GMs rivales en el frontend
+- el cliente tipa y aplica `trade.patch` de forma delta-only, indexando negociaciones por `proposal_id`
+- la sala de respuestas muestra estados `proposed`, `countered`, `rejected` y `accepted`
+- las contraofertas muestran el asset adicional requerido y pueden aceptarse desde la UI
+- estado, requests y errores del dominio viven en `useTradeOperations`; no se agrega la mecanica al god-hook mas alla del dispatch WebSocket y la composicion temporal previa a `M3.P2`
+- estilos propios en `components/trades/tradeCenter.css`, responsivos y alineados al design system
+- diseño validado registrado en `docs/plans/2026-07-15-m3-p1a-trade-center-design.md`
+- pruebas corridas: `npm run build --prefix frontend`, `GOCACHE=/tmp/pulsecity-gateway-gocache go -C services/gateway test ./...`, `make build`
+
+Limites M3.P1a:
+
+- el selector de jugador usa estado vivo recibido por `roster.patch`; la rehidratacion REST completa del roster sigue reservada para `M3.22`
+- el playtest manual de al menos tres propuestas y la documentacion de game feel se cierran en `M3.P1c`, despues de agregar Centro Medico en `M3.P1b`
+- `M3.P1` permanece pendiente hasta cerrar medicina jugable y el playtest conjunto
+
 #### M3.P2 — Particion de monolitos — PENDIENTE
 
 Objetivo:

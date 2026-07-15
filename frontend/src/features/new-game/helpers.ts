@@ -114,6 +114,10 @@ export function describeRealtimeEvent(event: RealtimeEvent) {
     return `${event.patch.relationships.length} relaciones cambiaron`;
   }
 
+  if (event.type === "trade.patch") {
+    return event.patch.detail ?? `Trade ${event.patch.status}: ${event.patch.proposal_id}`;
+  }
+
   if (event.type === "chat.message") {
     return `${event.agent_id}: ${event.body}`;
   }

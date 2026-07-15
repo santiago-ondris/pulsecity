@@ -190,7 +190,11 @@ export interface PlayerEmotionalState {
   competitive_drive: number;
   city_connection: number;
   summary: string;
-  availability?: "active" | "injured";
+  availability?: "active" | "injured" | "traded";
+  full_name?: string;
+  position?: string;
+  overall_rating?: number;
+  salary?: number;
   injury_id?: string;
   severity?: "minor" | "moderate" | "major";
   expected_recovery_date?: string;
@@ -251,6 +255,42 @@ export interface RelationsPatchEnvelope {
   };
 }
 
+export type TradeStatus = "proposed" | "countered" | "rejected" | "accepted";
+
+export interface TradeClientState {
+  proposal_id: string;
+  simulated_date: string;
+  source_event_id: string;
+  source_subject: string;
+  rival_team_id: string;
+  status: TradeStatus;
+  offered_player_id?: string;
+  offered_player_name?: string;
+  offered_salary?: number;
+  requested_position?: string;
+  incoming_salary?: number;
+  cap_space_after?: number;
+  reason?: string;
+  detail?: string;
+  additional_asset_required?: string;
+  outgoing_player_id?: string;
+  outgoing_player_name?: string;
+  incoming_player_id?: string;
+  incoming_player_name?: string;
+  incoming_position?: string;
+  incoming_rating?: number;
+  accepted_additional_asset?: string;
+}
+
+export type TradeClientStates = Record<string, TradeClientState>;
+
+export interface TradePatchEnvelope {
+  type: "trade.patch";
+  subject: string;
+  game_id: string;
+  patch: TradeClientState;
+}
+
 export interface NarrativeChoice {
   id: string;
   label: string;
@@ -306,6 +346,7 @@ export type RealtimeEvent =
   | AgentPatchEnvelope
   | RosterPatchEnvelope
   | RelationsPatchEnvelope
+  | TradePatchEnvelope
   | NarrativeEvent
   | NarrativeResponseEvent
   | ChatMessageEvent;
