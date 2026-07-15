@@ -159,6 +159,22 @@ Recibe un payload completo con el estado de ambos equipos (ratings, cansancio, e
 
 Cuando `narrative-service` escucha un evento en NATS, espera **250-500ms** antes de generar el texto narrativo. Este delay garantiza que `agent-service` ya procesó el mismo evento y actualizó el estado. Cuando el LLM recibe el contexto del agente, el estado ya refleja las consecuencias. No es coordinación — es timing.
 
+### 7. Los archivos no escalan a monolitos
+
+Los módulos se particionan por dominio, siempre. Un archivo debe partirse **en el mismo mini milestone que lo hizo crecer**, no después, cuando aparece cualquiera de estas señales:
+
+- mezcla más de un dominio (ej: reacciones a partidos + trades + salary cap en el mismo archivo)
+- supera ~600 líneas de lógica real
+- contiene data-as-code (catálogos, templates, seeds) mezclada con lógica — la data va a módulo propio
+
+En frontend aplica igual: ningún hook o componente concentra estado de múltiples dominios. El estado del cliente se separa por dominio (mapa, tiempo, roster, finanzas, relaciones, chat).
+
+Contexto: esta regla nace de la pausa de análisis del 15 de julio de 2026 (ver `docs/Sesiones/MILESTONE3/INICIOM3.MD`, sección `M3 — PAUSA ANALISIS`), cuando `agents.rs` (2778 líneas), `http.go` del gateway (1641), `store.go` de team-service (1545) y `useNewGameFlow.ts` (1313) escalaron a monolitos por no partirse a tiempo.
+
+### 8. Toda mecánica nueva es operable desde el frontend
+
+Todo mini milestone que agregue una mecánica nueva incluye en su criterio de done "operable desde el frontend, aunque sea mínimo" (calidad debug aceptable). Los tests unitarios validan correctitud, no game feel: un sistema que nadie jugó no está terminado. Regla vigente desde la pausa de análisis del 15 de julio de 2026.
+
 ---
 
 ## Modelo de tiempo simulado
