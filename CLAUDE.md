@@ -94,12 +94,12 @@ Runs every 100ms. Pauses when no WebSocket session is active (`tiempo.sesion_ini
 ## Development workflow
 
 - Work in **mini-milestones** — agree on a small, finishable goal per session.
-- Before starting: read `docs/02_Progress/INICIOM2.MD` for current M2 state and where to continue.
-- After finishing: mark the mini-milestone as done in `INICIOM2.MD` and update the relevant doc in `/docs/`.
+- Before starting: read `docs/Sesiones/MILESTONE3/INICIOM3.MD` for current M3 state and where to continue.
+- After finishing: mark the mini-milestone as done in `INICIOM3.MD` and update the relevant doc in `/docs/`.
 - For any visual work: consult `docs/00_start_here/pulsecity_designsystem.md` before writing CSS or components.
 - For game lore and world questions: read `docs/01_Canon/`.
 
-**Current milestone:** M2 — "El sistema late" (core simulation loop, 82-game season, 5 core agents).
+**Current milestone:** M3
 
 ---
 

@@ -17,6 +17,7 @@ pub const CORE_AGENT_IDS: [&str; 5] = [
 ];
 
 pub const INDIVIDUAL_AGENT_COUNT: usize = 30;
+pub const RIVAL_GM_COUNT: usize = 30;
 
 const MIN_STATE_VALUE: f64 = -1.0;
 const MAX_STATE_VALUE: f64 = 1.0;
@@ -130,11 +131,36 @@ pub struct IndividualAgentState {
     pub agenda: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RivalGMProfile {
+    pub game_id: String,
+    pub rival_team_id: String,
+    pub gm_agent_id: String,
+    pub display_name: String,
+    pub team_name: String,
+    pub negotiation_style: String,
+    pub urgency_current: f64,
+    pub build_philosophy: String,
+    pub roster_needs: Vec<String>,
+    pub relationship_trust: f64,
+    pub relationship_history: Vec<String>,
+    pub last_interaction_event_id: Option<String>,
+}
+
 #[must_use]
 pub fn default_individual_agent_states(game_id: &str) -> Vec<IndividualAgentState> {
     individual_agent_templates()
         .into_iter()
         .map(|template| template.into_state(game_id))
+        .collect()
+}
+
+#[must_use]
+pub fn default_rival_gms(game_id: &str) -> Vec<RivalGMProfile> {
+    rival_team_templates()
+        .into_iter()
+        .enumerate()
+        .map(|(index, team)| rival_gm_profile(game_id, index, team))
         .collect()
 }
 
@@ -1893,6 +1919,125 @@ fn string_map_from_pairs(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RivalTeamTemplate {
+    team_id: &'static str,
+    team_name: &'static str,
+    gm_name: &'static str,
+}
+
+fn rival_team_templates() -> Vec<RivalTeamTemplate> {
+    vec![
+        rival_team("atl", "Atlanta Hawks", "Darius Bell"),
+        rival_team("bos", "Boston Celtics", "Elliot Walsh"),
+        rival_team("bkn", "Brooklyn Nets", "Miles Abram"),
+        rival_team("cha", "Charlotte Hornets", "Noah Whitaker"),
+        rival_team("chi", "Chicago Bulls", "Grant Mercer"),
+        rival_team("cle", "Cleveland Cavaliers", "Isaiah Cole"),
+        rival_team("dal", "Dallas Mavericks", "Owen Strickland"),
+        rival_team("den", "Denver Nuggets", "Calvin Price"),
+        rival_team("det", "Detroit Pistons", "Marcus Vale"),
+        rival_team("gsw", "Golden State Warriors", "Adrian Cross"),
+        rival_team("hou", "Houston Rockets", "Victor Hayes"),
+        rival_team("ind", "Indiana Pacers", "Simon Reed"),
+        rival_team("lac", "LA Clippers", "Julian Pierce"),
+        rival_team("lal", "Los Angeles Lakers", "Wesley Kane"),
+        rival_team("mem", "Memphis Grizzlies", "Malcolm Brooks"),
+        rival_team("mia", "Miami Heat", "Rafael Soto"),
+        rival_team("mil", "Milwaukee Bucks", "Leonard Frost"),
+        rival_team("min", "Minnesota Timberwolves", "Theo Ramsey"),
+        rival_team("nop", "New Orleans Pelicans", "Bennett Shaw"),
+        rival_team("nyk", "New York Knicks", "Dominic Hale"),
+        rival_team("okc", "Oklahoma City Thunder", "Preston Lane"),
+        rival_team("orl", "Orlando Magic", "Felix Ward"),
+        rival_team("phi", "Philadelphia 76ers", "Jonah Bishop"),
+        rival_team("phx", "Phoenix Suns", "Gideon Marks"),
+        rival_team("por", "Portland Trail Blazers", "Evan Holt"),
+        rival_team("sac", "Sacramento Kings", "Trevor Nash"),
+        rival_team("sas", "San Antonio Spurs", "Nolan Voss"),
+        rival_team("tor", "Toronto Raptors", "Arthur Quinn"),
+        rival_team("uta", "Utah Jazz", "Silas Finch"),
+        rival_team("was", "Washington Wizards", "Graham Lowell"),
+    ]
+}
+
+fn rival_team(
+    team_id: &'static str,
+    team_name: &'static str,
+    gm_name: &'static str,
+) -> RivalTeamTemplate {
+    RivalTeamTemplate {
+        team_id,
+        team_name,
+        gm_name,
+    }
+}
+
+fn rival_gm_profile(game_id: &str, index: usize, team: RivalTeamTemplate) -> RivalGMProfile {
+    let styles = [
+        "patient_value_hunter",
+        "aggressive_star_chaser",
+        "defensive_conservative",
+        "asset_accumulator",
+        "cap_flexible_operator",
+        "win_now_pressure",
+    ];
+    let philosophies = [
+        "draft_and_develop",
+        "star_driven_contention",
+        "defense_first_identity",
+        "pace_and_spacing",
+        "financial_optionalidad",
+        "veteran_stability",
+    ];
+    let position_groups = [
+        ["PG", "bench_shooting"],
+        ["SG", "point_of_attack_defense"],
+        ["SF", "wing_depth"],
+        ["PF", "frontcourt_size"],
+        ["C", "rim_protection"],
+        ["secondary_creation", "salary_relief"],
+    ];
+
+    let style_index = deterministic_bucket(game_id, team.team_id, "style", styles.len());
+    let philosophy_index =
+        deterministic_bucket(game_id, team.team_id, "philosophy", philosophies.len());
+    let needs_index = deterministic_bucket(game_id, team.team_id, "needs", position_groups.len());
+    let urgency_bucket = deterministic_bucket(game_id, team.team_id, "urgency", 41);
+    let trust_bucket = deterministic_bucket(game_id, team.team_id, "trust", 31);
+
+    RivalGMProfile {
+        game_id: game_id.to_string(),
+        rival_team_id: team.team_id.to_string(),
+        gm_agent_id: format!("rival_gm_{}", team.team_id),
+        display_name: team.gm_name.to_string(),
+        team_name: team.team_name.to_string(),
+        negotiation_style: styles[style_index].to_string(),
+        urgency_current: clamp_unit(0.25 + (urgency_bucket as f64 * 0.0125)),
+        build_philosophy: philosophies[philosophy_index].to_string(),
+        roster_needs: position_groups[needs_index]
+            .iter()
+            .map(|need| (*need).to_string())
+            .collect(),
+        relationship_trust: clamp(-0.15 + (trust_bucket as f64 * 0.01)),
+        relationship_history: vec![
+            "Sin historial directo con el GM de PulseCity".to_string(),
+            format!("Perfil inicial sembrado como rival #{:02}", index + 1),
+        ],
+        last_interaction_event_id: None,
+    }
+}
+
+fn deterministic_bucket(game_id: &str, team_id: &str, salt: &str, modulo: usize) -> usize {
+    let mut hash = 14_695_981_039_346_656_037_u64;
+    for byte in game_id.bytes().chain(team_id.bytes()).chain(salt.bytes()) {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(1_099_511_628_211);
+    }
+
+    (hash as usize) % modulo
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MatchContext {
     won: bool,
     home_game: bool,
@@ -1985,6 +2130,50 @@ mod tests {
             assert!(!agent.agenda.is_empty());
             assert!(!agent.state.is_empty());
         }
+    }
+
+    #[test]
+    fn rival_gm_catalog_seeds_thirty_profiles() {
+        let rival_gms = default_rival_gms("game-1");
+
+        assert_eq!(rival_gms.len(), RIVAL_GM_COUNT);
+        assert!(rival_gms.iter().any(|gm| gm.rival_team_id == "bos"));
+        assert!(rival_gms.iter().any(|gm| gm.gm_agent_id == "rival_gm_lal"));
+        assert!(
+            rival_gms
+                .iter()
+                .all(|gm| !gm.roster_needs.is_empty() && !gm.relationship_history.is_empty())
+        );
+    }
+
+    #[test]
+    fn rival_gm_catalog_is_deterministic_per_game() {
+        let first = default_rival_gms("game-1");
+        let second = default_rival_gms("game-1");
+        let other_game = default_rival_gms("game-2");
+
+        assert_eq!(first, second);
+        assert_ne!(first[0].negotiation_style, "");
+        assert!(
+            first
+                .iter()
+                .all(|gm| (0.0..=1.0).contains(&gm.urgency_current))
+        );
+        assert!(
+            first
+                .iter()
+                .all(|gm| (-1.0..=1.0).contains(&gm.relationship_trust))
+        );
+        assert_ne!(
+            first
+                .iter()
+                .map(|gm| (&gm.negotiation_style, &gm.roster_needs))
+                .collect::<Vec<_>>(),
+            other_game
+                .iter()
+                .map(|gm| (&gm.negotiation_style, &gm.roster_needs))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

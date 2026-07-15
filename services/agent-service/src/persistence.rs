@@ -4,10 +4,11 @@ use tokio_postgres::{Client, NoTls};
 use crate::{
     agents::{
         AgentRelationship, AgentRelationshipChange, AgentStateChange, CoreAgentState,
-        IndividualAgentState, MatchAgentReactions, PlayerAgentState, TeamRosterPlayer,
-        apply_gm_decision_to_relationships, apply_match_finished, apply_match_to_player_agents,
-        apply_match_to_relationships, apply_salary_cap_to_core_agents, default_agent_relationships,
-        default_core_agent_state, default_individual_agent_states, default_player_agent_state,
+        IndividualAgentState, MatchAgentReactions, PlayerAgentState, RivalGMProfile,
+        TeamRosterPlayer, apply_gm_decision_to_relationships, apply_match_finished,
+        apply_match_to_player_agents, apply_match_to_relationships,
+        apply_salary_cap_to_core_agents, default_agent_relationships, default_core_agent_state,
+        default_individual_agent_states, default_player_agent_state, default_rival_gms,
     },
     events::{GMDecisionRegisteredEvent, MatchFinishedEvent, SalaryCapCalculatedEvent},
     simulation::SimulationState,
@@ -153,6 +154,31 @@ CREATE TABLE IF NOT EXISTS gm_decisions_log (
 CREATE INDEX IF NOT EXISTS idx_gm_decisions_log_game_created
 ON gm_decisions_log (game_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS rival_gms (
+    game_id TEXT NOT NULL,
+    rival_team_id TEXT NOT NULL,
+    gm_agent_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    team_name TEXT NOT NULL,
+    negotiation_style TEXT NOT NULL,
+    urgency_current DOUBLE PRECISION NOT NULL,
+    build_philosophy TEXT NOT NULL,
+    roster_needs_json TEXT NOT NULL,
+    relationship_trust DOUBLE PRECISION NOT NULL,
+    relationship_history_json TEXT NOT NULL,
+    last_interaction_event_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, rival_team_id),
+    UNIQUE (game_id, gm_agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rival_gms_game_style
+ON rival_gms (game_id, negotiation_style);
+
+CREATE INDEX IF NOT EXISTS idx_rival_gms_game_urgency
+ON rival_gms (game_id, urgency_current DESC);
+
 CREATE TABLE IF NOT EXISTS agent_processed_matches (
     game_id TEXT NOT NULL,
     match_id TEXT NOT NULL,
@@ -249,6 +275,7 @@ ON CONFLICT (game_id) DO UPDATE SET
         self.ensure_individual_agents(game_id).await?;
         self.ensure_player_agents(game_id).await?;
         self.ensure_agent_relationships(game_id).await?;
+        self.ensure_rival_gms(game_id).await?;
         if let Some(state) = self.load_simulation_state(game_id).await? {
             return Ok(state);
         }
@@ -341,6 +368,34 @@ WHERE game_id = $1;
             )
             .await
             .with_context(|| "count agent relationships")?;
+
+        Ok(row.get(0))
+    }
+
+    pub async fn ensure_rival_gms(&self, game_id: &str) -> Result<u64> {
+        let rival_gms = default_rival_gms(game_id);
+        let mut inserted = 0;
+
+        for rival_gm in rival_gms {
+            inserted += self.insert_rival_gm_if_missing(&rival_gm).await?;
+        }
+
+        Ok(inserted)
+    }
+
+    pub async fn count_rival_gms(&self, game_id: &str) -> Result<i64> {
+        let row = self
+            .client
+            .query_one(
+                "
+SELECT COUNT(*)
+FROM rival_gms
+WHERE game_id = $1;
+",
+                &[&game_id],
+            )
+            .await
+            .with_context(|| "count rival gms")?;
 
         Ok(row.get(0))
     }
@@ -707,6 +762,53 @@ ON CONFLICT (game_id, relationship_key) DO NOTHING;
             )
             .await
             .with_context(|| "insert agent relationship")
+    }
+
+    async fn insert_rival_gm_if_missing(&self, rival_gm: &RivalGMProfile) -> Result<u64> {
+        let roster_needs_json = serde_json::to_string(&rival_gm.roster_needs)
+            .with_context(|| "encode rival gm roster needs json")?;
+        let relationship_history_json = serde_json::to_string(&rival_gm.relationship_history)
+            .with_context(|| "encode rival gm relationship history json")?;
+
+        self.client
+            .execute(
+                "
+INSERT INTO rival_gms (
+    game_id,
+    rival_team_id,
+    gm_agent_id,
+    display_name,
+    team_name,
+    negotiation_style,
+    urgency_current,
+    build_philosophy,
+    roster_needs_json,
+    relationship_trust,
+    relationship_history_json,
+    last_interaction_event_id,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+ON CONFLICT (game_id, rival_team_id) DO NOTHING;
+",
+                &[
+                    &rival_gm.game_id,
+                    &rival_gm.rival_team_id,
+                    &rival_gm.gm_agent_id,
+                    &rival_gm.display_name,
+                    &rival_gm.team_name,
+                    &rival_gm.negotiation_style,
+                    &rival_gm.urgency_current,
+                    &rival_gm.build_philosophy,
+                    &roster_needs_json,
+                    &rival_gm.relationship_trust,
+                    &relationship_history_json,
+                    &rival_gm.last_interaction_event_id,
+                ],
+            )
+            .await
+            .with_context(|| "insert rival gm")
     }
 
     pub async fn apply_match_finished(

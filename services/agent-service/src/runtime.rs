@@ -398,6 +398,14 @@ async fn process_map_generation_started(
         .count_agent_relationships(&event.game_id)
         .await
         .with_context(|| format!("count agent relationships game={}", event.game_id))?;
+    let inserted_rival_gms = store
+        .ensure_rival_gms(&event.game_id)
+        .await
+        .with_context(|| format!("seed rival gms game={}", event.game_id))?;
+    let total_rival_gms = store
+        .count_rival_gms(&event.game_id)
+        .await
+        .with_context(|| format!("count rival gms game={}", event.game_id))?;
 
     info!(
         game_id = %event.game_id,
@@ -407,6 +415,8 @@ async fn process_map_generation_started(
         total_players,
         inserted_relationships,
         total_relationships,
+        inserted_rival_gms,
+        total_rival_gms,
         "individual agents ready"
     );
 
