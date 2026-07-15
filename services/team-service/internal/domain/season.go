@@ -60,6 +60,33 @@ type RosterPlayer struct {
 	SortOrder     int
 }
 
+func MaterializeIncomingTradePlayer(
+	gameID string,
+	proposalID string,
+	requestedPosition string,
+	incomingSalary int,
+	outgoingRating uint8,
+	sortOrder int,
+) RosterPlayer {
+	firstNames := []string{"Jalen", "Marcus", "Tobias", "Dorian", "Caleb", "Isaiah", "Miles", "Andre"}
+	lastNames := []string{"Warren", "Porter", "Holland", "Bennett", "Sullivan", "Maddox", "Foster", "Graves"}
+	first := firstNames[stableHash(gameID, proposalID, "first")%uint64(len(firstNames))]
+	last := lastNames[stableHash(gameID, proposalID, "last")%uint64(len(lastNames))]
+	ratingDelta := int(stableHash(gameID, proposalID, "rating")%5) - 2
+
+	return RosterPlayer{
+		PlayerID:      proposalID + "-incoming",
+		GameID:        gameID,
+		FullName:      first + " " + last,
+		Position:      requestedPosition,
+		OverallRating: clampRating(int(outgoingRating) + ratingDelta),
+		RosterStatus:  "active",
+		ContractYears: uint8(1 + stableHash(gameID, proposalID, "years")%3),
+		Salary:        incomingSalary,
+		SortOrder:     sortOrder,
+	}
+}
+
 func CalculateSalaryCap(
 	gameID string,
 	roster []RosterPlayer,
@@ -71,7 +98,7 @@ func CalculateSalaryCap(
 	committedSalary := 0
 	rosterCount := 0
 	for _, player := range roster {
-		if player.RosterStatus == "waived" {
+		if player.RosterStatus == "waived" || player.RosterStatus == "traded" {
 			continue
 		}
 		committedSalary += player.Salary

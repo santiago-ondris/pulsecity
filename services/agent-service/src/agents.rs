@@ -4,7 +4,8 @@ use crate::events::{
     AgentRelationshipChangedEvent, AgentStateChangedEvent, EventMeta, GMDecisionRegisteredEvent,
     MatchFinishedEvent, PlayerBoxScore, PlayerEmotionalPatch, RosterPatchEnvelope,
     RosterStatePatch, SUBJECT_GM_DECISION_REGISTERED, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
-    SalaryCapCalculatedEvent,
+    SalaryCapCalculatedEvent, TradeAcceptedEvent, TradeCounteredEvent, TradeProposedEvent,
+    TradeRejectedEvent,
 };
 
 pub const OWN_TEAM_ID: &str = "pulsecity";
@@ -147,6 +148,12 @@ pub struct RivalGMProfile {
     pub last_interaction_event_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RivalGMTradeEvaluation {
+    Rejected(TradeRejectedEvent),
+    Countered(TradeCounteredEvent),
+}
+
 #[must_use]
 pub fn default_individual_agent_states(game_id: &str) -> Vec<IndividualAgentState> {
     individual_agent_templates()
@@ -193,6 +200,83 @@ pub fn default_agent_relationships(game_id: &str) -> Vec<AgentRelationship> {
         .into_iter()
         .map(|seed| seed.into_relationship(game_id))
         .collect()
+}
+
+#[must_use]
+pub fn evaluate_trade_proposal(
+    rival_gm: &RivalGMProfile,
+    event: &TradeProposedEvent,
+    occurred_at: String,
+) -> RivalGMTradeEvaluation {
+    let need_fit = rival_gm
+        .roster_needs
+        .iter()
+        .any(|need| need.eq_ignore_ascii_case(&event.requested_position));
+    let salary_pressure = event.incoming_salary.saturating_sub(event.offered_salary);
+    let leverage_score = rival_gm.urgency_current + rival_gm.relationship_trust;
+    let style = rival_gm.negotiation_style.as_str();
+
+    if !need_fit && leverage_score < 0.58 {
+        return RivalGMTradeEvaluation::Rejected(TradeRejectedEvent {
+            meta: trade_meta(
+                format!("trade-rejected-{}", event.proposal_id),
+                event,
+                occurred_at,
+            ),
+            proposal_id: event.proposal_id.clone(),
+            simulated_date: event.simulated_date.clone(),
+            rival_team_id: event.rival_team_id.clone(),
+            reason: "rival_needs_mismatch".to_string(),
+            detail: format!(
+                "{} no ve encaje claro con sus necesidades actuales.",
+                rival_gm.display_name
+            ),
+        });
+    }
+
+    if salary_pressure > 8_000_000 && style != "win_now_pressure" {
+        return RivalGMTradeEvaluation::Rejected(TradeRejectedEvent {
+            meta: trade_meta(
+                format!("trade-rejected-{}", event.proposal_id),
+                event,
+                occurred_at,
+            ),
+            proposal_id: event.proposal_id.clone(),
+            simulated_date: event.simulated_date.clone(),
+            rival_team_id: event.rival_team_id.clone(),
+            reason: "salary_value_gap".to_string(),
+            detail: format!(
+                "{} rechaza absorber tanta diferencia salarial sin mas valor.",
+                rival_gm.display_name
+            ),
+        });
+    }
+
+    let additional_asset_required = match style {
+        "asset_accumulator" => "second_round_pick",
+        "aggressive_star_chaser" => "rotation_player",
+        "cap_flexible_operator" => "salary_relief",
+        "defensive_conservative" => "defensive_wing",
+        "win_now_pressure" => "veteran_depth",
+        _ => "future_second",
+    };
+
+    RivalGMTradeEvaluation::Countered(TradeCounteredEvent {
+        meta: trade_meta(
+            format!("trade-countered-{}", event.proposal_id),
+            event,
+            occurred_at,
+        ),
+        proposal_id: event.proposal_id.clone(),
+        simulated_date: event.simulated_date.clone(),
+        rival_team_id: event.rival_team_id.clone(),
+        requested_position: event.requested_position.clone(),
+        additional_asset_required: additional_asset_required.to_string(),
+        detail: format!(
+            "{} no acepta el paquete inicial, pero deja abierta una contraoferta.",
+            rival_gm.display_name
+        ),
+    })
 }
 
 #[must_use]
@@ -1308,6 +1392,91 @@ pub fn apply_match_to_player_agents(
 }
 
 #[must_use]
+pub fn apply_trade_accepted_to_player_agents(
+    current_states: Vec<PlayerAgentState>,
+    event: &TradeAcceptedEvent,
+) -> (Vec<PlayerAgentState>, RosterPatchEnvelope) {
+    let mut updated_states = Vec::with_capacity(current_states.len() + 1);
+    let mut incoming_found = false;
+    let mut patches = Vec::with_capacity(2);
+
+    for mut state in current_states {
+        if state.player_id == event.outgoing_player_id {
+            state.emotional_state = "traded".to_string();
+            state.satisfaction = adjusted(state.satisfaction, -0.08);
+            state.loyalty = clamp_unit(state.loyalty - 0.12);
+            state.city_connection = clamp_unit(state.city_connection - 0.18);
+            patches.push(PlayerEmotionalPatch {
+                player_id: state.player_id.clone(),
+                emotional_state: state.emotional_state.clone(),
+                satisfaction: state.satisfaction,
+                loyalty: state.loyalty,
+                ego: state.ego,
+                competitive_drive: state.competitive_drive,
+                city_connection: state.city_connection,
+                summary: format!("{} procesa su salida via trade.", state.full_name),
+            });
+        }
+        if state.player_id == event.incoming_player_id {
+            incoming_found = true;
+            state.emotional_state = "arriving".to_string();
+            state.satisfaction = adjusted(state.satisfaction, 0.03);
+            patches.push(PlayerEmotionalPatch {
+                player_id: state.player_id.clone(),
+                emotional_state: state.emotional_state.clone(),
+                satisfaction: state.satisfaction,
+                loyalty: state.loyalty,
+                ego: state.ego,
+                competitive_drive: state.competitive_drive,
+                city_connection: state.city_connection,
+                summary: format!("{} llega a PulseCity via trade.", state.full_name),
+            });
+        }
+        updated_states.push(state);
+    }
+
+    if !incoming_found {
+        let player = TeamRosterPlayer {
+            player_id: event.incoming_player_id.clone(),
+            game_id: event.meta.game_id.clone(),
+            full_name: event.incoming_player_name.clone(),
+            position: event.incoming_position.clone(),
+            overall_rating: event.incoming_rating,
+            roster_status: "active".to_string(),
+        };
+        let mut state = default_player_agent_state(&player);
+        state.emotional_state = "arriving".to_string();
+        state.city_connection = 0.18;
+        patches.push(PlayerEmotionalPatch {
+            player_id: state.player_id.clone(),
+            emotional_state: state.emotional_state.clone(),
+            satisfaction: state.satisfaction,
+            loyalty: state.loyalty,
+            ego: state.ego,
+            competitive_drive: state.competitive_drive,
+            city_connection: state.city_connection,
+            summary: format!("{} llega a PulseCity via trade.", state.full_name),
+        });
+        updated_states.push(state);
+    }
+
+    (
+        updated_states,
+        RosterPatchEnvelope {
+            event_type: SUBJECT_ROSTER_PATCH.to_string(),
+            subject: SUBJECT_ROSTER_PATCH.to_string(),
+            game_id: event.meta.game_id.clone(),
+            patch: RosterStatePatch {
+                simulated_date: event.simulated_date.clone(),
+                source_event_id: event.meta.event_id.clone(),
+                source_subject: "trade.aceptada".to_string(),
+                players: patches,
+            },
+        },
+    )
+}
+
+#[must_use]
 pub fn apply_match_to_relationships(
     current_relationships: Vec<AgentRelationship>,
     event: &MatchFinishedEvent,
@@ -1804,6 +1973,15 @@ fn relationship_changed_event_from_decision(
     }
 }
 
+fn trade_meta(event_id: String, event: &TradeProposedEvent, occurred_at: String) -> EventMeta {
+    EventMeta {
+        event_id,
+        game_id: event.meta.game_id.clone(),
+        occurred_at,
+        schema_version: SCHEMA_VERSION,
+    }
+}
+
 fn player_patch(
     state: &PlayerAgentState,
     line: &PlayerBoxScore,
@@ -2177,6 +2355,98 @@ mod tests {
     }
 
     #[test]
+    fn rival_gm_rejects_trade_when_needs_do_not_fit() {
+        let rival_gm = RivalGMProfile {
+            game_id: "game-1".to_string(),
+            rival_team_id: "bos".to_string(),
+            gm_agent_id: "rival_gm_bos".to_string(),
+            display_name: "Elliot Walsh".to_string(),
+            team_name: "Boston Celtics".to_string(),
+            negotiation_style: "patient_value_hunter".to_string(),
+            urgency_current: 0.25,
+            build_philosophy: "draft_and_develop".to_string(),
+            roster_needs: vec!["C".to_string()],
+            relationship_trust: -0.1,
+            relationship_history: vec!["Sin historial".to_string()],
+            last_interaction_event_id: None,
+        };
+
+        let evaluation = evaluate_trade_proposal(
+            &rival_gm,
+            &sample_trade_proposal("PG", 12_000_000),
+            "now".to_string(),
+        );
+
+        match evaluation {
+            RivalGMTradeEvaluation::Rejected(event) => {
+                assert_eq!(event.reason, "rival_needs_mismatch");
+                assert_eq!(event.proposal_id, "proposal-1");
+            }
+            RivalGMTradeEvaluation::Countered(_) => {
+                panic!("expected rejected trade evaluation")
+            }
+        }
+    }
+
+    #[test]
+    fn rival_gm_counters_trade_when_needs_fit() {
+        let rival_gm = RivalGMProfile {
+            game_id: "game-1".to_string(),
+            rival_team_id: "bos".to_string(),
+            gm_agent_id: "rival_gm_bos".to_string(),
+            display_name: "Elliot Walsh".to_string(),
+            team_name: "Boston Celtics".to_string(),
+            negotiation_style: "asset_accumulator".to_string(),
+            urgency_current: 0.5,
+            build_philosophy: "draft_and_develop".to_string(),
+            roster_needs: vec!["PG".to_string()],
+            relationship_trust: 0.05,
+            relationship_history: vec!["Sin historial".to_string()],
+            last_interaction_event_id: None,
+        };
+
+        let evaluation = evaluate_trade_proposal(
+            &rival_gm,
+            &sample_trade_proposal("PG", 12_000_000),
+            "now".to_string(),
+        );
+
+        match evaluation {
+            RivalGMTradeEvaluation::Countered(event) => {
+                assert_eq!(event.additional_asset_required, "second_round_pick");
+                assert_eq!(event.rival_team_id, "bos");
+            }
+            RivalGMTradeEvaluation::Rejected(_) => {
+                panic!("expected countered trade evaluation")
+            }
+        }
+    }
+
+    #[test]
+    fn trade_acceptance_updates_outgoing_and_incoming_player_agents() {
+        let outgoing =
+            default_player_agent_state(&sample_roster_player("game-1-player-01", 82, "PG"));
+        let event = sample_trade_accepted();
+
+        let (states, patch) = apply_trade_accepted_to_player_agents(vec![outgoing], &event);
+
+        let outgoing = states
+            .iter()
+            .find(|state| state.player_id == "game-1-player-01")
+            .expect("outgoing player state exists");
+        let incoming = states
+            .iter()
+            .find(|state| state.player_id == "trade-1-incoming")
+            .expect("incoming player state exists");
+
+        assert_eq!(outgoing.emotional_state, "traded");
+        assert_eq!(incoming.emotional_state, "arriving");
+        assert_eq!(incoming.full_name, "Jalen Warren");
+        assert_eq!(patch.patch.players.len(), 2);
+        assert_eq!(patch.patch.source_subject, "trade.aceptada");
+    }
+
+    #[test]
     fn default_player_agent_state_uses_team_player_id() {
         let player = sample_roster_player("game-1-player-01", 82, "PG");
         let state = default_player_agent_state(&player);
@@ -2461,6 +2731,48 @@ mod tests {
             position: position.to_string(),
             overall_rating,
             roster_status: "active".to_string(),
+        }
+    }
+
+    fn sample_trade_proposal(requested_position: &str, incoming_salary: i64) -> TradeProposedEvent {
+        TradeProposedEvent {
+            meta: EventMeta {
+                event_id: "trade-proposed-proposal-1".to_string(),
+                game_id: "game-1".to_string(),
+                occurred_at: "2026-11-01T00:00:00Z".to_string(),
+                schema_version: 1,
+            },
+            proposal_id: "proposal-1".to_string(),
+            simulated_date: "2026-11-01".to_string(),
+            rival_team_id: "bos".to_string(),
+            offered_player_id: "player-1".to_string(),
+            offered_player_name: "Mateo Cross".to_string(),
+            offered_salary: 10_000_000,
+            requested_position: requested_position.to_string(),
+            incoming_salary,
+            cap_space_after: -12_000_000,
+        }
+    }
+
+    fn sample_trade_accepted() -> TradeAcceptedEvent {
+        TradeAcceptedEvent {
+            meta: EventMeta {
+                event_id: "trade-accepted-trade-1".to_string(),
+                game_id: "game-1".to_string(),
+                occurred_at: "2026-11-01T00:00:00Z".to_string(),
+                schema_version: 1,
+            },
+            proposal_id: "trade-1".to_string(),
+            simulated_date: "2026-11-01".to_string(),
+            rival_team_id: "bos".to_string(),
+            outgoing_player_id: "game-1-player-01".to_string(),
+            outgoing_player_name: "Mateo Cross".to_string(),
+            incoming_player_id: "trade-1-incoming".to_string(),
+            incoming_player_name: "Jalen Warren".to_string(),
+            incoming_position: "PG".to_string(),
+            incoming_rating: 80,
+            incoming_salary: 12_000_000,
+            accepted_additional_asset: Some("second_round_pick".to_string()),
         }
     }
 }

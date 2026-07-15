@@ -252,6 +252,18 @@ func main() {
 		log.Fatalf("subscribe chat message events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectTradeWildcard, func(subject string, data []byte) {
+		var event domain.TradeEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode trade event %s: %v", subject, err)
+			return
+		}
+
+		hub.Broadcast(domain.TradePatchFromEvent(subject, event))
+	}); err != nil {
+		log.Fatalf("subscribe trade events: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	httphandlers.RegisterRoutes(mux, httphandlers.Dependencies{
 		Bus:       bus,

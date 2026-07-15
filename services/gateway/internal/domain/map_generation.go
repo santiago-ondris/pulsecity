@@ -75,6 +75,25 @@ type MedicalDecisionRequest struct {
 	SimulatedDate string `json:"simulated_date"`
 }
 
+type TradeProposalRequest struct {
+	RivalTeamID       string `json:"rival_team_id"`
+	OfferedPlayerID   string `json:"offered_player_id"`
+	RequestedPosition string `json:"requested_position"`
+	IncomingSalary    int    `json:"incoming_salary"`
+	SimulatedDate     string `json:"simulated_date"`
+}
+
+type TradeProposalAcceptedResponse struct {
+	ProposalID string `json:"proposal_id"`
+	Status     string `json:"status"`
+}
+
+type TradeAcceptanceRequest struct {
+	ProposalID              string `json:"proposal_id"`
+	AcceptedAdditionalAsset string `json:"accepted_additional_asset,omitempty"`
+	SimulatedDate           string `json:"simulated_date"`
+}
+
 type NarrativeChoice struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
@@ -189,6 +208,12 @@ const (
 	SubjectPlayerInjured        = "jugador.lesionado"
 	SubjectPlayerRecovered      = "jugador.recuperado"
 	SubjectGMDecisionRegistered = "decision.gm_registrada"
+	SubjectTradeWildcard        = "trade.*"
+	SubjectTradeProposed        = "trade.propuesta_enviada"
+	SubjectTradeRejected        = "trade.rechazada"
+	SubjectTradeCountered       = "trade.contraoferta"
+	SubjectTradeAccepted        = "trade.aceptada"
+	SubjectTradePatchDelta      = "trade.patch"
 )
 
 type EventMeta struct {
@@ -363,6 +388,10 @@ type PlayerEmotionalPatch struct {
 	CityConnection        float64 `json:"city_connection"`
 	Summary               string  `json:"summary"`
 	Availability          string  `json:"availability,omitempty"`
+	FullName              string  `json:"full_name,omitempty"`
+	Position              string  `json:"position,omitempty"`
+	OverallRating         uint8   `json:"overall_rating,omitempty"`
+	Salary                int     `json:"salary,omitempty"`
 	InjuryID              string  `json:"injury_id,omitempty"`
 	Severity              string  `json:"severity,omitempty"`
 	ExpectedRecoveryDate  string  `json:"expected_recovery_date,omitempty"`
@@ -388,6 +417,104 @@ type PlayerRecoveredEvent struct {
 	InjuryID    string `json:"injury_id"`
 	PlayerID    string `json:"player_id"`
 	RecoveredOn string `json:"recovered_on"`
+}
+
+type TradeEvent struct {
+	EventMeta
+	ProposalID              string `json:"proposal_id"`
+	SimulatedDate           string `json:"simulated_date"`
+	RivalTeamID             string `json:"rival_team_id"`
+	OfferedPlayerID         string `json:"offered_player_id,omitempty"`
+	OfferedPlayerName       string `json:"offered_player_name,omitempty"`
+	OfferedSalary           int    `json:"offered_salary,omitempty"`
+	RequestedPosition       string `json:"requested_position,omitempty"`
+	IncomingSalary          int    `json:"incoming_salary,omitempty"`
+	CapSpaceAfter           int    `json:"cap_space_after,omitempty"`
+	Reason                  string `json:"reason,omitempty"`
+	Detail                  string `json:"detail,omitempty"`
+	AdditionalAssetRequired string `json:"additional_asset_required,omitempty"`
+	OutgoingPlayerID        string `json:"outgoing_player_id,omitempty"`
+	OutgoingPlayerName      string `json:"outgoing_player_name,omitempty"`
+	IncomingPlayerID        string `json:"incoming_player_id,omitempty"`
+	IncomingPlayerName      string `json:"incoming_player_name,omitempty"`
+	IncomingPosition        string `json:"incoming_position,omitempty"`
+	IncomingRating          uint8  `json:"incoming_rating,omitempty"`
+	AcceptedAdditionalAsset string `json:"accepted_additional_asset,omitempty"`
+}
+
+type TradePatchEnvelope struct {
+	Type    string          `json:"type"`
+	Subject string          `json:"subject"`
+	GameID  string          `json:"game_id"`
+	Patch   TradeStatePatch `json:"patch"`
+}
+
+type TradeStatePatch struct {
+	ProposalID              string `json:"proposal_id"`
+	SimulatedDate           string `json:"simulated_date"`
+	SourceEventID           string `json:"source_event_id"`
+	SourceSubject           string `json:"source_subject"`
+	RivalTeamID             string `json:"rival_team_id"`
+	Status                  string `json:"status"`
+	OfferedPlayerID         string `json:"offered_player_id,omitempty"`
+	OfferedPlayerName       string `json:"offered_player_name,omitempty"`
+	OfferedSalary           int    `json:"offered_salary,omitempty"`
+	RequestedPosition       string `json:"requested_position,omitempty"`
+	IncomingSalary          int    `json:"incoming_salary,omitempty"`
+	CapSpaceAfter           int    `json:"cap_space_after,omitempty"`
+	Reason                  string `json:"reason,omitempty"`
+	Detail                  string `json:"detail,omitempty"`
+	AdditionalAssetRequired string `json:"additional_asset_required,omitempty"`
+	OutgoingPlayerID        string `json:"outgoing_player_id,omitempty"`
+	OutgoingPlayerName      string `json:"outgoing_player_name,omitempty"`
+	IncomingPlayerID        string `json:"incoming_player_id,omitempty"`
+	IncomingPlayerName      string `json:"incoming_player_name,omitempty"`
+	IncomingPosition        string `json:"incoming_position,omitempty"`
+	IncomingRating          uint8  `json:"incoming_rating,omitempty"`
+	AcceptedAdditionalAsset string `json:"accepted_additional_asset,omitempty"`
+}
+
+func TradePatchFromEvent(subject string, event TradeEvent) TradePatchEnvelope {
+	status := "proposed"
+	if subject == SubjectTradeRejected {
+		status = "rejected"
+	}
+	if subject == SubjectTradeCountered {
+		status = "countered"
+	}
+	if subject == SubjectTradeAccepted {
+		status = "accepted"
+	}
+
+	return TradePatchEnvelope{
+		Type:    SubjectTradePatchDelta,
+		Subject: subject,
+		GameID:  event.GameID,
+		Patch: TradeStatePatch{
+			ProposalID:              event.ProposalID,
+			SimulatedDate:           event.SimulatedDate,
+			SourceEventID:           event.EventID,
+			SourceSubject:           subject,
+			RivalTeamID:             event.RivalTeamID,
+			Status:                  status,
+			OfferedPlayerID:         event.OfferedPlayerID,
+			OfferedPlayerName:       event.OfferedPlayerName,
+			OfferedSalary:           event.OfferedSalary,
+			RequestedPosition:       event.RequestedPosition,
+			IncomingSalary:          event.IncomingSalary,
+			CapSpaceAfter:           event.CapSpaceAfter,
+			Reason:                  event.Reason,
+			Detail:                  event.Detail,
+			AdditionalAssetRequired: event.AdditionalAssetRequired,
+			OutgoingPlayerID:        event.OutgoingPlayerID,
+			OutgoingPlayerName:      event.OutgoingPlayerName,
+			IncomingPlayerID:        event.IncomingPlayerID,
+			IncomingPlayerName:      event.IncomingPlayerName,
+			IncomingPosition:        event.IncomingPosition,
+			IncomingRating:          event.IncomingRating,
+			AcceptedAdditionalAsset: event.AcceptedAdditionalAsset,
+		},
+	}
 }
 
 func RosterPatchFromPlayerInjured(event PlayerInjuredEvent) RosterPatchEnvelope {

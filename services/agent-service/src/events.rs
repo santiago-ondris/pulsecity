@@ -15,6 +15,10 @@ pub const SUBJECT_AGENT_CRITICAL_EVENT: &str = "agente.evento_critico";
 pub const SUBJECT_ROSTER_PATCH: &str = "roster.patch";
 pub const SUBJECT_GM_DECISION_REGISTERED: &str = "decision.gm_registrada";
 pub const SUBJECT_SALARY_CAP_CALCULATED: &str = "salary_cap.calculado";
+pub const SUBJECT_TRADE_PROPOSED: &str = "trade.propuesta_enviada";
+pub const SUBJECT_TRADE_REJECTED: &str = "trade.rechazada";
+pub const SUBJECT_TRADE_COUNTERED: &str = "trade.contraoferta";
+pub const SUBJECT_TRADE_ACCEPTED: &str = "trade.aceptada";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventMeta {
@@ -206,6 +210,62 @@ pub struct SalaryCapCalculatedEvent {
     pub status: String,
     pub near_luxury_tax: bool,
     pub projected_tax_payment: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeProposedEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub proposal_id: String,
+    pub simulated_date: String,
+    pub rival_team_id: String,
+    pub offered_player_id: String,
+    pub offered_player_name: String,
+    pub offered_salary: i64,
+    pub requested_position: String,
+    pub incoming_salary: i64,
+    pub cap_space_after: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeRejectedEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub proposal_id: String,
+    pub simulated_date: String,
+    pub rival_team_id: String,
+    pub reason: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeCounteredEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub proposal_id: String,
+    pub simulated_date: String,
+    pub rival_team_id: String,
+    pub requested_position: String,
+    pub additional_asset_required: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeAcceptedEvent {
+    #[serde(flatten)]
+    pub meta: EventMeta,
+    pub proposal_id: String,
+    pub simulated_date: String,
+    pub rival_team_id: String,
+    pub outgoing_player_id: String,
+    pub outgoing_player_name: String,
+    pub incoming_player_id: String,
+    pub incoming_player_name: String,
+    pub incoming_position: String,
+    pub incoming_rating: u8,
+    pub incoming_salary: i64,
+    #[serde(default)]
+    pub accepted_additional_asset: Option<String>,
 }
 
 #[cfg(test)]

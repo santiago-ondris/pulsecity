@@ -7,6 +7,10 @@ func TestEventSubjects(t *testing.T) {
 		"day advanced":    SubjectTimeDayAdvanced,
 		"match scheduled": SubjectMatchScheduled,
 		"match finished":  SubjectMatchFinished,
+		"trade proposed":  SubjectTradeProposed,
+		"trade rejected":  SubjectTradeRejected,
+		"trade countered": SubjectTradeCountered,
+		"trade accepted":  SubjectTradeAccepted,
 	}
 
 	if tests["day advanced"] != "tiempo.dia_avanzado" {
@@ -17,6 +21,18 @@ func TestEventSubjects(t *testing.T) {
 	}
 	if tests["match finished"] != "partido.terminado" {
 		t.Fatalf("SubjectMatchFinished = %q", tests["match finished"])
+	}
+	if tests["trade proposed"] != "trade.propuesta_enviada" {
+		t.Fatalf("SubjectTradeProposed = %q", tests["trade proposed"])
+	}
+	if tests["trade rejected"] != "trade.rechazada" {
+		t.Fatalf("SubjectTradeRejected = %q", tests["trade rejected"])
+	}
+	if tests["trade countered"] != "trade.contraoferta" {
+		t.Fatalf("SubjectTradeCountered = %q", tests["trade countered"])
+	}
+	if tests["trade accepted"] != "trade.aceptada" {
+		t.Fatalf("SubjectTradeAccepted = %q", tests["trade accepted"])
 	}
 }
 

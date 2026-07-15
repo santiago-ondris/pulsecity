@@ -11,6 +11,10 @@ const (
 	SubjectGMDecision       = "decision.gm_registrada"
 	SubjectSalaryCap        = "salary_cap.calculado"
 	SubjectFinancePatch     = "finance.patch"
+	SubjectTradeProposed    = "trade.propuesta_enviada"
+	SubjectTradeRejected    = "trade.rechazada"
+	SubjectTradeCountered   = "trade.contraoferta"
+	SubjectTradeAccepted    = "trade.aceptada"
 	SubjectSeasonPatchDelta = "season.patch"
 	SubjectMatchResultDelta = "match.result"
 )
@@ -86,6 +90,53 @@ type GMDecisionRegisteredEvent struct {
 	SourceSubject  string            `json:"source_subject,omitempty"`
 }
 
+type TradeProposedEvent struct {
+	EventMeta
+	ProposalID        string `json:"proposal_id"`
+	SimulatedDate     string `json:"simulated_date"`
+	RivalTeamID       string `json:"rival_team_id"`
+	OfferedPlayerID   string `json:"offered_player_id"`
+	OfferedPlayerName string `json:"offered_player_name"`
+	OfferedSalary     int    `json:"offered_salary"`
+	RequestedPosition string `json:"requested_position"`
+	IncomingSalary    int    `json:"incoming_salary"`
+	CapSpaceAfter     int    `json:"cap_space_after"`
+}
+
+type TradeRejectedEvent struct {
+	EventMeta
+	ProposalID    string `json:"proposal_id"`
+	SimulatedDate string `json:"simulated_date"`
+	RivalTeamID   string `json:"rival_team_id"`
+	Reason        string `json:"reason"`
+	Detail        string `json:"detail"`
+}
+
+type TradeCounteredEvent struct {
+	EventMeta
+	ProposalID              string `json:"proposal_id"`
+	SimulatedDate           string `json:"simulated_date"`
+	RivalTeamID             string `json:"rival_team_id"`
+	RequestedPosition       string `json:"requested_position"`
+	AdditionalAssetRequired string `json:"additional_asset_required"`
+	Detail                  string `json:"detail"`
+}
+
+type TradeAcceptedEvent struct {
+	EventMeta
+	ProposalID              string `json:"proposal_id"`
+	SimulatedDate           string `json:"simulated_date"`
+	RivalTeamID             string `json:"rival_team_id"`
+	OutgoingPlayerID        string `json:"outgoing_player_id"`
+	OutgoingPlayerName      string `json:"outgoing_player_name"`
+	IncomingPlayerID        string `json:"incoming_player_id"`
+	IncomingPlayerName      string `json:"incoming_player_name"`
+	IncomingPosition        string `json:"incoming_position"`
+	IncomingRating          uint8  `json:"incoming_rating"`
+	IncomingSalary          int    `json:"incoming_salary"`
+	AcceptedAdditionalAsset string `json:"accepted_additional_asset,omitempty"`
+}
+
 type SalaryCapCalculatedEvent struct {
 	EventMeta
 	SimulatedDate       string `json:"simulated_date"`
@@ -145,6 +196,11 @@ type PlayerEmotionalPatch struct {
 	CompetitiveDrive float64 `json:"competitive_drive"`
 	CityConnection   float64 `json:"city_connection"`
 	Summary          string  `json:"summary"`
+	Availability     string  `json:"availability,omitempty"`
+	FullName         string  `json:"full_name,omitempty"`
+	Position         string  `json:"position,omitempty"`
+	OverallRating    uint8   `json:"overall_rating,omitempty"`
+	Salary           int     `json:"salary,omitempty"`
 }
 
 type SeasonPatchEvent struct {

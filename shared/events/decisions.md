@@ -67,3 +67,63 @@ Opciones validas:
 - `reduce_minutes`
 - `ignore_doctor`
 - `force_return`
+
+### `trade_proposal`
+
+Publicado por `gateway` cuando el GM inicia una propuesta de trade.
+
+```json
+{
+  "event_id": "decision-trade-uuid",
+  "game_id": "game-1",
+  "occurred_at": "2026-11-01T00:00:04Z",
+  "schema_version": 1,
+  "decision_id": "trade-uuid",
+  "kind": "trade_proposal",
+  "payload": {
+    "proposal_id": "trade-uuid",
+    "rival_team_id": "bos",
+    "offered_player_id": "game-1-player-06",
+    "requested_position": "PG",
+    "incoming_salary": "12000000"
+  },
+  "simulated_date": "2026-11-01",
+  "agents_affected": ["director_player_personnel", "cfo", "rival_gm_bos"],
+  "source_event_id": "trade-uuid",
+  "source_subject": "trade.propuesta_gm"
+}
+```
+
+Notas:
+
+- `team-service` valida ownership de roster y salary cap antes de publicar `trade.propuesta_enviada`.
+- `agent-service` evalua el perfil persistido del GM rival solo despues de recibir `trade.propuesta_enviada`.
+
+### `trade_acceptance`
+
+Publicado por `gateway` cuando el GM acepta cerrar una propuesta abierta o una contraoferta.
+
+```json
+{
+  "event_id": "decision-accept-trade-uuid",
+  "game_id": "game-1",
+  "occurred_at": "2026-11-01T00:01:04Z",
+  "schema_version": 1,
+  "decision_id": "accept-trade-uuid",
+  "kind": "trade_acceptance",
+  "payload": {
+    "proposal_id": "trade-uuid",
+    "accepted_additional_asset": "second_round_pick"
+  },
+  "simulated_date": "2026-11-01",
+  "agents_affected": ["director_player_personnel", "cfo"],
+  "source_event_id": "trade-uuid",
+  "source_subject": "trade.contraoferta"
+}
+```
+
+Notas:
+
+- `team-service` vuelve a validar que la propuesta siga abierta y que el jugador ofrecido siga activo.
+- Si se acepta, `team-service` muta roster y cap antes de publicar `trade.aceptada`.
+- Reintentar la misma aceptacion no duplica jugadores ni vuelve a publicar eventos desde `team-service`.

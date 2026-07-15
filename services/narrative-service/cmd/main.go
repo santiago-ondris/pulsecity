@@ -62,6 +62,18 @@ func main() {
 		log.Fatalf("subscribe match finished events: %v", err)
 	}
 
+	if _, err := bus.Subscribe(domain.SubjectTradeAccepted, func(_ string, data []byte) {
+		var event domain.TradeAcceptedEvent
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Printf("decode trade accepted: %v", err)
+			return
+		}
+
+		go processTradeAccepted(bus, store, event)
+	}); err != nil {
+		log.Fatalf("subscribe trade accepted events: %v", err)
+	}
+
 	if _, err := bus.Subscribe(domain.SubjectAgentConsultationStarted, func(_ string, data []byte) {
 		var event domain.AgentConsultationStartedEvent
 		if err := json.Unmarshal(data, &event); err != nil {
@@ -75,9 +87,10 @@ func main() {
 	}
 
 	log.Printf(
-		"narrative-service listening on %s, %s and %s",
+		"narrative-service listening on %s, %s, %s and %s",
 		domain.SubjectNarrativeOwnerIntroRequested,
 		domain.SubjectMatchFinished,
+		domain.SubjectTradeAccepted,
 		domain.SubjectAgentConsultationStarted,
 	)
 
@@ -132,6 +145,27 @@ func processMatchFinished(bus *natsclient.Client, store *persistence.Store, matc
 
 	if err := bus.PublishJSON(domain.SubjectNarrativeEventGenerated, event); err != nil {
 		log.Printf("publish post-match narrative game=%s match=%s: %v", match.GameID, match.MatchID, err)
+	}
+}
+
+func processTradeAccepted(bus *natsclient.Client, store *persistence.Store, trade domain.TradeAcceptedEvent) {
+	time.Sleep(deterministicNarrativeDelay(trade.EventID, trade.ProposalID))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	event := domain.BuildPostTradeNarrative(trade)
+	stored, err := store.InsertNarrativeEventIfNew(ctx, event)
+	if err != nil {
+		log.Printf("persist post-trade narrative game=%s proposal=%s: %v", trade.GameID, trade.ProposalID, err)
+		return
+	}
+	if !stored {
+		return
+	}
+
+	if err := bus.PublishJSON(domain.SubjectNarrativeEventGenerated, event); err != nil {
+		log.Printf("publish post-trade narrative game=%s proposal=%s: %v", trade.GameID, trade.ProposalID, err)
 	}
 }
 

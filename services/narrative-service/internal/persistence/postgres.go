@@ -135,9 +135,7 @@ INSERT INTO narrative_events (
 	created_at
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''), NOW())
-ON CONFLICT (game_id, source_match_id, kind)
-WHERE source_match_id IS NOT NULL
-DO NOTHING;
+ON CONFLICT DO NOTHING;
 `
 
 	commandTag, err := s.pool.Exec(ctx, query,

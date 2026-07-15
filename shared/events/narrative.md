@@ -66,5 +66,39 @@ Notas:
 
 - en M2 la narrativa es templateada/rule-based.
 - para post-partido, `narrative-service` escucha `partido.terminado`, espera 250-500ms y genera `narrativa.evento_generado`.
+- para post-trade, `narrative-service` escucha `trade.aceptada`, espera 250-500ms y genera `narrativa.evento_generado` con `kind = post_trade`.
+
+## `post_trade`
+
+Evento narrativo templateado generado cuando se cierra un trade.
+
+```json
+{
+  "event_id": "post-trade-trade-uuid",
+  "game_id": "game-1",
+  "type": "narrative.event",
+  "subject": "narrativa.evento_generado",
+  "emitter": "director_player_personnel",
+  "kind": "post_trade",
+  "urgency": "normal",
+  "title": "Trade cerrado",
+  "body": "Player Personnel confirma el cierre: Adrian Vale sale de PulseCity y Jalen Warren llega para cubrir PG...",
+  "metadata": {
+    "proposal_id": "trade-uuid",
+    "source_event_id": "trade-accepted-trade-uuid",
+    "source_subject": "trade.aceptada",
+    "simulated_date": "2026-11-01",
+    "rival_team_id": "bos",
+    "outgoing_player_id": "game-1-player-06",
+    "incoming_player_id": "trade-uuid-incoming",
+    "incoming_position": "PG",
+    "incoming_rating": "76",
+    "incoming_salary": "12000000"
+  },
+  "choices": [
+    { "id": "acknowledge", "label": "Tomar nota" }
+  ]
+}
+```
 - despues del delay puede leer contexto actualizado de la partida para incluir racha si esta disponible.
 - el `gateway` reenvia este evento al frontend como `narrative.event`.

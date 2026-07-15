@@ -5,12 +5,16 @@ use crate::{
     agents::{
         AgentRelationship, AgentRelationshipChange, AgentStateChange, CoreAgentState,
         IndividualAgentState, MatchAgentReactions, PlayerAgentState, RivalGMProfile,
-        TeamRosterPlayer, apply_gm_decision_to_relationships, apply_match_finished,
-        apply_match_to_player_agents, apply_match_to_relationships,
-        apply_salary_cap_to_core_agents, default_agent_relationships, default_core_agent_state,
-        default_individual_agent_states, default_player_agent_state, default_rival_gms,
+        RivalGMTradeEvaluation, TeamRosterPlayer, apply_gm_decision_to_relationships,
+        apply_match_finished, apply_match_to_player_agents, apply_match_to_relationships,
+        apply_salary_cap_to_core_agents, apply_trade_accepted_to_player_agents,
+        default_agent_relationships, default_core_agent_state, default_individual_agent_states,
+        default_player_agent_state, default_rival_gms, evaluate_trade_proposal,
     },
-    events::{GMDecisionRegisteredEvent, MatchFinishedEvent, SalaryCapCalculatedEvent},
+    events::{
+        GMDecisionRegisteredEvent, MatchFinishedEvent, RosterPatchEnvelope,
+        SalaryCapCalculatedEvent, TradeAcceptedEvent, TradeProposedEvent,
+    },
     simulation::SimulationState,
 };
 
@@ -179,12 +183,30 @@ ON rival_gms (game_id, negotiation_style);
 CREATE INDEX IF NOT EXISTS idx_rival_gms_game_urgency
 ON rival_gms (game_id, urgency_current DESC);
 
+CREATE TABLE IF NOT EXISTS rival_gm_trade_evaluations (
+    proposal_id TEXT PRIMARY KEY,
+    game_id TEXT NOT NULL,
+    rival_team_id TEXT NOT NULL,
+    result_subject TEXT NOT NULL,
+    result_event_id TEXT NOT NULL,
+    evaluated_at TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS agent_processed_matches (
     game_id TEXT NOT NULL,
     match_id TEXT NOT NULL,
     source_event_id TEXT NOT NULL,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (game_id, match_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_processed_trades (
+    game_id TEXT NOT NULL,
+    proposal_id TEXT NOT NULL,
+    source_event_id TEXT NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (game_id, proposal_id)
 );
 ",
             )
@@ -398,6 +420,111 @@ WHERE game_id = $1;
             .with_context(|| "count rival gms")?;
 
         Ok(row.get(0))
+    }
+
+    pub async fn evaluate_trade_proposal(
+        &self,
+        event: &TradeProposedEvent,
+        occurred_at: String,
+    ) -> Result<Option<RivalGMTradeEvaluation>> {
+        self.ensure_rival_gms(&event.meta.game_id).await?;
+
+        let rival_gm = self
+            .load_rival_gm(&event.meta.game_id, &event.rival_team_id)
+            .await?;
+        let evaluation = evaluate_trade_proposal(&rival_gm, event, occurred_at.clone());
+        let (subject, event_id) = match &evaluation {
+            RivalGMTradeEvaluation::Rejected(event) => {
+                ("trade.rechazada", event.meta.event_id.as_str())
+            }
+            RivalGMTradeEvaluation::Countered(event) => {
+                ("trade.contraoferta", event.meta.event_id.as_str())
+            }
+        };
+        let inserted = self
+            .client
+            .execute(
+                "
+INSERT INTO rival_gm_trade_evaluations (
+    proposal_id,
+    game_id,
+    rival_team_id,
+    result_subject,
+    result_event_id,
+    evaluated_at,
+    created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, NOW())
+ON CONFLICT (proposal_id) DO NOTHING;
+",
+                &[
+                    &event.proposal_id,
+                    &event.meta.game_id,
+                    &event.rival_team_id,
+                    &subject,
+                    &event_id,
+                    &occurred_at,
+                ],
+            )
+            .await
+            .with_context(|| "record rival gm trade evaluation")?;
+
+        if inserted == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(evaluation))
+    }
+
+    pub async fn apply_trade_accepted(
+        &mut self,
+        event: &TradeAcceptedEvent,
+    ) -> Result<Option<RosterPatchEnvelope>> {
+        self.ensure_player_agents(&event.meta.game_id).await?;
+
+        let transaction = self
+            .client
+            .transaction()
+            .await
+            .with_context(|| "begin agent trade reaction")?;
+
+        let processed = transaction
+            .execute(
+                "
+INSERT INTO agent_processed_trades (game_id, proposal_id, source_event_id, processed_at)
+VALUES ($1, $2, $3, NOW())
+ON CONFLICT (game_id, proposal_id) DO NOTHING;
+",
+                &[
+                    &event.meta.game_id,
+                    &event.proposal_id,
+                    &event.meta.event_id,
+                ],
+            )
+            .await
+            .with_context(|| "mark agent trade processed")?;
+
+        if processed == 0 {
+            transaction
+                .rollback()
+                .await
+                .with_context(|| "rollback already processed agent trade")?;
+            return Ok(None);
+        }
+
+        let player_states = load_player_agent_states(&transaction, &event.meta.game_id).await?;
+        let (updated_player_states, roster_patch) =
+            apply_trade_accepted_to_player_agents(player_states, event);
+        for state in &updated_player_states {
+            save_player_agent_state(&transaction, state).await?;
+        }
+
+        transaction
+            .commit()
+            .await
+            .with_context(|| "commit agent trade reaction")?;
+
+        Ok(Some(roster_patch))
     }
 
     pub async fn record_gm_decision(&self, event: &GMDecisionRegisteredEvent) -> Result<bool> {
@@ -809,6 +936,55 @@ ON CONFLICT (game_id, rival_team_id) DO NOTHING;
             )
             .await
             .with_context(|| "insert rival gm")
+    }
+
+    async fn load_rival_gm(&self, game_id: &str, rival_team_id: &str) -> Result<RivalGMProfile> {
+        let row = self
+            .client
+            .query_one(
+                "
+SELECT
+    game_id,
+    rival_team_id,
+    gm_agent_id,
+    display_name,
+    team_name,
+    negotiation_style,
+    urgency_current,
+    build_philosophy,
+    roster_needs_json,
+    relationship_trust,
+    relationship_history_json,
+    last_interaction_event_id
+FROM rival_gms
+WHERE game_id = $1 AND rival_team_id = $2;
+",
+                &[&game_id, &rival_team_id],
+            )
+            .await
+            .with_context(|| "load rival gm")?;
+
+        let roster_needs_json: String = row.get("roster_needs_json");
+        let relationship_history_json: String = row.get("relationship_history_json");
+        let roster_needs = serde_json::from_str(&roster_needs_json)
+            .with_context(|| "decode rival gm roster needs json")?;
+        let relationship_history = serde_json::from_str(&relationship_history_json)
+            .with_context(|| "decode rival gm relationship history json")?;
+
+        Ok(RivalGMProfile {
+            game_id: row.get("game_id"),
+            rival_team_id: row.get("rival_team_id"),
+            gm_agent_id: row.get("gm_agent_id"),
+            display_name: row.get("display_name"),
+            team_name: row.get("team_name"),
+            negotiation_style: row.get("negotiation_style"),
+            urgency_current: row.get("urgency_current"),
+            build_philosophy: row.get("build_philosophy"),
+            roster_needs,
+            relationship_trust: row.get("relationship_trust"),
+            relationship_history,
+            last_interaction_event_id: row.get("last_interaction_event_id"),
+        })
     }
 
     pub async fn apply_match_finished(

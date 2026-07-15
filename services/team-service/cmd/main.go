@@ -206,6 +206,56 @@ func run() error {
 				return
 			}
 		}
+		proposed, rejected, err := store.ApplyTradeProposal(ctx, event)
+		if err != nil {
+			log.Printf("apply trade proposal game=%s decision=%s: %v", event.GameID, event.DecisionID, err)
+			return
+		}
+		if proposed != nil {
+			if err := bus.PublishJSON(domain.SubjectTradeProposed, proposed); err != nil {
+				log.Printf("publish trade proposal game=%s proposal=%s: %v", proposed.GameID, proposed.ProposalID, err)
+				return
+			}
+			log.Printf("trade proposal sent game=%s proposal=%s rival=%s", proposed.GameID, proposed.ProposalID, proposed.RivalTeamID)
+		}
+		if rejected != nil {
+			if err := bus.PublishJSON(domain.SubjectTradeRejected, rejected); err != nil {
+				log.Printf("publish trade rejection game=%s proposal=%s: %v", rejected.GameID, rejected.ProposalID, err)
+				return
+			}
+			log.Printf("trade rejected game=%s proposal=%s reason=%s", rejected.GameID, rejected.ProposalID, rejected.Reason)
+		}
+		accepted, rosterPatch, salaryCap, acceptanceRejected, err := store.ApplyTradeAcceptance(ctx, event)
+		if err != nil {
+			log.Printf("apply trade acceptance game=%s decision=%s: %v", event.GameID, event.DecisionID, err)
+			return
+		}
+		if acceptanceRejected != nil {
+			if err := bus.PublishJSON(domain.SubjectTradeRejected, acceptanceRejected); err != nil {
+				log.Printf("publish trade acceptance rejection game=%s proposal=%s: %v", acceptanceRejected.GameID, acceptanceRejected.ProposalID, err)
+				return
+			}
+			log.Printf("trade acceptance rejected game=%s proposal=%s reason=%s", acceptanceRejected.GameID, acceptanceRejected.ProposalID, acceptanceRejected.Reason)
+		}
+		if accepted != nil {
+			if err := bus.PublishJSON(domain.SubjectTradeAccepted, accepted); err != nil {
+				log.Printf("publish trade accepted game=%s proposal=%s: %v", accepted.GameID, accepted.ProposalID, err)
+				return
+			}
+			if err := bus.PublishJSON(domain.SubjectRosterPatchDelta, rosterPatch); err != nil {
+				log.Printf("publish trade roster patch game=%s proposal=%s: %v", accepted.GameID, accepted.ProposalID, err)
+				return
+			}
+			if err := bus.PublishJSON(domain.SubjectSalaryCap, salaryCap); err != nil {
+				log.Printf("publish trade salary cap game=%s proposal=%s: %v", accepted.GameID, accepted.ProposalID, err)
+				return
+			}
+			if err := bus.PublishJSON(domain.SubjectFinancePatch, domain.FinancePatchFromSalaryCap(*salaryCap)); err != nil {
+				log.Printf("publish trade finance patch game=%s proposal=%s: %v", accepted.GameID, accepted.ProposalID, err)
+				return
+			}
+			log.Printf("trade accepted game=%s proposal=%s outgoing=%s incoming=%s", accepted.GameID, accepted.ProposalID, accepted.OutgoingPlayerID, accepted.IncomingPlayerID)
+		}
 	}); err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, error, info, warn};
 
 use crate::{
+    agents::RivalGMTradeEvaluation,
     events::{
         DayAdvancedEvent, EventMeta, GMDecisionRegisteredEvent, MapGenerationStartedEvent,
         MatchFinishedEvent, PauseChangedEvent, SUBJECT_AGENT_RELATIONSHIP_CHANGED,
@@ -17,7 +18,9 @@ use crate::{
         SUBJECT_MAP_GENERATION_STARTED, SUBJECT_MATCH_FINISHED, SUBJECT_ROSTER_PATCH,
         SUBJECT_SALARY_CAP_CALCULATED, SUBJECT_TIME_DAY_ADVANCED, SUBJECT_TIME_PAUSE_CHANGED,
         SUBJECT_TIME_SESSION_ENDED, SUBJECT_TIME_SESSION_STARTED, SUBJECT_TIME_SPEED_CHANGED,
-        SalaryCapCalculatedEvent, SessionEndedEvent, SessionStartedEvent, SpeedChangedEvent,
+        SUBJECT_TRADE_ACCEPTED, SUBJECT_TRADE_COUNTERED, SUBJECT_TRADE_PROPOSED,
+        SUBJECT_TRADE_REJECTED, SalaryCapCalculatedEvent, SessionEndedEvent, SessionStartedEvent,
+        SpeedChangedEvent, TradeAcceptedEvent, TradeProposedEvent,
     },
     persistence::Store,
     simulation::{SimulationAccumulator, SimulationState, advance_simulated_date},
@@ -73,6 +76,14 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
         .subscribe(SUBJECT_SALARY_CAP_CALCULATED)
         .await
         .context("subscribe salary_cap.calculado")?;
+    let mut trade_proposed = client
+        .subscribe(SUBJECT_TRADE_PROPOSED)
+        .await
+        .context("subscribe trade.propuesta_enviada")?;
+    let mut trade_accepted = client
+        .subscribe(SUBJECT_TRADE_ACCEPTED)
+        .await
+        .context("subscribe trade.aceptada")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -175,6 +186,22 @@ pub async fn run(client: Client, mut store: Store) -> Result<()> {
 
                 process_salary_cap_calculated(&client, &mut store, &event).await?;
             }
+            Some(message) = trade_proposed.next() => {
+                let event = match decode_event::<TradeProposedEvent>(SUBJECT_TRADE_PROPOSED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                process_trade_proposed(&client, &store, &event).await?;
+            }
+            Some(message) = trade_accepted.next() => {
+                let event = match decode_event::<TradeAcceptedEvent>(SUBJECT_TRADE_ACCEPTED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+
+                process_trade_accepted(&client, &mut store, &event).await?;
+            }
         }
     }
 
@@ -218,6 +245,14 @@ pub async fn run_for_game(
         .subscribe(SUBJECT_SALARY_CAP_CALCULATED)
         .await
         .context("subscribe salary_cap.calculado")?;
+    let mut trade_proposed = client
+        .subscribe(SUBJECT_TRADE_PROPOSED)
+        .await
+        .context("subscribe trade.propuesta_enviada")?;
+    let mut trade_accepted = client
+        .subscribe(SUBJECT_TRADE_ACCEPTED)
+        .await
+        .context("subscribe trade.aceptada")?;
 
     let mut ticker = interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -340,6 +375,28 @@ pub async fn run_for_game(
                 }
 
                 process_salary_cap_calculated(&client, &mut store, &event).await?;
+            }
+            Some(message) = trade_proposed.next() => {
+                let event = match decode_event::<TradeProposedEvent>(SUBJECT_TRADE_PROPOSED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+                if event.meta.game_id != state.game_id {
+                    continue;
+                }
+
+                process_trade_proposed(&client, &store, &event).await?;
+            }
+            Some(message) = trade_accepted.next() => {
+                let event = match decode_event::<TradeAcceptedEvent>(SUBJECT_TRADE_ACCEPTED, &message.payload) {
+                    Some(event) => event,
+                    None => continue,
+                };
+                if event.meta.game_id != state.game_id {
+                    continue;
+                }
+
+                process_trade_accepted(&client, &mut store, &event).await?;
             }
         }
     }
@@ -486,6 +543,78 @@ async fn process_salary_cap_calculated(
             .await
             .context("publish agente.estado_cambio from salary cap")?;
     }
+
+    Ok(())
+}
+
+async fn process_trade_proposed(
+    client: &Client,
+    store: &Store,
+    event: &TradeProposedEvent,
+) -> Result<()> {
+    let Some(evaluation) = store
+        .evaluate_trade_proposal(event, now_rfc3339())
+        .await
+        .with_context(|| {
+            format!(
+                "evaluate trade proposal game={} proposal={}",
+                event.meta.game_id, event.proposal_id
+            )
+        })?
+    else {
+        debug!(
+            game_id = %event.meta.game_id,
+            proposal_id = %event.proposal_id,
+            "rival gm trade evaluation already processed"
+        );
+        return Ok(());
+    };
+
+    match evaluation {
+        RivalGMTradeEvaluation::Rejected(event) => {
+            let payload = serde_json::to_vec(&event).context("encode trade.rechazada")?;
+            client
+                .publish(SUBJECT_TRADE_REJECTED, payload.into())
+                .await
+                .context("publish trade.rechazada")?;
+        }
+        RivalGMTradeEvaluation::Countered(event) => {
+            let payload = serde_json::to_vec(&event).context("encode trade.contraoferta")?;
+            client
+                .publish(SUBJECT_TRADE_COUNTERED, payload.into())
+                .await
+                .context("publish trade.contraoferta")?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn process_trade_accepted(
+    client: &Client,
+    store: &mut Store,
+    event: &TradeAcceptedEvent,
+) -> Result<()> {
+    let Some(roster_patch) = store.apply_trade_accepted(event).await.with_context(|| {
+        format!(
+            "apply trade accepted game={} proposal={}",
+            event.meta.game_id, event.proposal_id
+        )
+    })?
+    else {
+        debug!(
+            game_id = %event.meta.game_id,
+            proposal_id = %event.proposal_id,
+            "agent trade reaction already processed"
+        );
+        return Ok(());
+    };
+
+    let payload = serde_json::to_vec(&roster_patch).context("encode roster.patch from trade")?;
+    client
+        .publish(SUBJECT_ROSTER_PATCH, payload.into())
+        .await
+        .context("publish roster.patch from trade")?;
 
     Ok(())
 }

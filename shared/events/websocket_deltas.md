@@ -14,6 +14,7 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
 - `agent.patch`
 - `roster.patch`
 - `relations.patch`
+- `trade.patch`
 - `narrative.event`
 - `chat.message`
 
@@ -177,6 +178,62 @@ Campos opcionales M3.9 en cada jugador:
         "short_history": []
       }
     ]
+  }
+}
+```
+
+## `trade.patch`
+
+Delta emitido por `gateway` cuando recibe `trade.propuesta_enviada`, `trade.rechazada`, `trade.contraoferta` o `trade.aceptada`.
+
+```json
+{
+  "type": "trade.patch",
+  "subject": "trade.contraoferta",
+  "game_id": "uuid",
+  "patch": {
+    "proposal_id": "trade-uuid",
+    "simulated_date": "2026-11-01",
+    "source_event_id": "trade-countered-trade-uuid",
+    "source_subject": "trade.contraoferta",
+    "rival_team_id": "bos",
+    "status": "countered",
+    "requested_position": "PG",
+    "additional_asset_required": "second_round_pick",
+    "detail": "Elliot Walsh no acepta el paquete inicial, pero deja abierta una contraoferta."
+  }
+}
+```
+
+Estados iniciales:
+
+- `proposed`: `team-service` valido roster/cap y envio la propuesta al GM rival.
+- `rejected`: la propuesta fue bloqueada por `team-service` o rechazada por el GM rival.
+- `countered`: el GM rival mantiene la negociacion abierta con una condicion extra.
+- `accepted`: `team-service` cerro el trade, materializo el jugador recibido y actualizo roster/cap.
+
+Ejemplo aceptado:
+
+```json
+{
+  "type": "trade.patch",
+  "subject": "trade.aceptada",
+  "game_id": "uuid",
+  "patch": {
+    "proposal_id": "trade-uuid",
+    "simulated_date": "2026-11-01",
+    "source_event_id": "trade-accepted-trade-uuid",
+    "source_subject": "trade.aceptada",
+    "rival_team_id": "bos",
+    "status": "accepted",
+    "outgoing_player_id": "game-1-player-06",
+    "outgoing_player_name": "Adrian Vale",
+    "incoming_player_id": "trade-uuid-incoming",
+    "incoming_player_name": "Jalen Warren",
+    "incoming_position": "PG",
+    "incoming_rating": 76,
+    "incoming_salary": 12000000,
+    "accepted_additional_asset": "second_round_pick"
   }
 }
 ```

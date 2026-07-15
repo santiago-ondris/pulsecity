@@ -185,6 +185,40 @@ CREATE TABLE IF NOT EXISTS team_salary_cap (
 	source_subject TEXT NOT NULL,
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS team_trades (
+	proposal_id TEXT PRIMARY KEY,
+	game_id TEXT NOT NULL,
+	rival_team_id TEXT NOT NULL,
+	offered_player_id TEXT NOT NULL,
+	offered_player_name TEXT NOT NULL,
+	offered_salary INTEGER NOT NULL,
+	requested_position TEXT NOT NULL,
+	incoming_salary INTEGER NOT NULL,
+	cap_space_after INTEGER NOT NULL,
+	status TEXT NOT NULL,
+	rejection_reason TEXT,
+	rejection_detail TEXT,
+	incoming_player_id TEXT,
+	incoming_player_name TEXT,
+	incoming_rating SMALLINT,
+	accepted_additional_asset TEXT,
+	accepted_at TEXT,
+	source_decision_id TEXT NOT NULL,
+	source_event_id TEXT NOT NULL,
+	simulated_date TEXT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_trades_game_status
+ON team_trades (game_id, status);
+
+ALTER TABLE team_trades ADD COLUMN IF NOT EXISTS incoming_player_id TEXT;
+ALTER TABLE team_trades ADD COLUMN IF NOT EXISTS incoming_player_name TEXT;
+ALTER TABLE team_trades ADD COLUMN IF NOT EXISTS incoming_rating SMALLINT;
+ALTER TABLE team_trades ADD COLUMN IF NOT EXISTS accepted_additional_asset TEXT;
+ALTER TABLE team_trades ADD COLUMN IF NOT EXISTS accepted_at TEXT;
 `
 
 	_, err := s.pool.Exec(ctx, query)
@@ -446,6 +480,238 @@ WHERE game_id = $1
 	}
 
 	return recovered, nil
+}
+
+func (s *Store) ApplyTradeProposal(
+	ctx context.Context,
+	event domain.GMDecisionRegisteredEvent,
+) (*domain.TradeProposedEvent, *domain.TradeRejectedEvent, error) {
+	if event.Kind != "trade_proposal" {
+		return nil, nil, nil
+	}
+
+	proposalID := event.Payload["proposal_id"]
+	rivalTeamID := event.Payload["rival_team_id"]
+	offeredPlayerID := event.Payload["offered_player_id"]
+	requestedPosition := event.Payload["requested_position"]
+	incomingSalary, err := parsePositiveInt(event.Payload["incoming_salary"])
+	if proposalID == "" || rivalTeamID == "" || offeredPlayerID == "" || requestedPosition == "" || err != nil {
+		return nil, nil, fmt.Errorf("apply trade proposal: invalid proposal payload")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin apply trade proposal: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, found, err := loadTradeStatus(ctx, tx, proposalID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if found {
+		return nil, nil, tx.Commit(ctx)
+	}
+
+	player, err := loadRosterPlayer(ctx, tx, event.GameID, offeredPlayerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			rejected := tradeRejectedFromDecision(event, proposalID, rivalTeamID, "player_not_found", "El jugador ofrecido no pertenece al roster activo de PulseCity.")
+			if err := insertRejectedTrade(ctx, tx, event, rejected, offeredPlayerID, requestedPosition, incomingSalary); err != nil {
+				return nil, nil, err
+			}
+			return nil, &rejected, tx.Commit(ctx)
+		}
+		return nil, nil, err
+	}
+	if player.RosterStatus != "active" {
+		rejected := tradeRejectedFromDecision(event, proposalID, rivalTeamID, "player_unavailable", "El jugador ofrecido no esta activo para negociar.")
+		if err := insertRejectedTrade(ctx, tx, event, rejected, offeredPlayerID, requestedPosition, incomingSalary); err != nil {
+			return nil, nil, err
+		}
+		return nil, &rejected, tx.Commit(ctx)
+	}
+
+	roster, err := loadRoster(ctx, tx, event.GameID)
+	if err != nil {
+		return nil, nil, err
+	}
+	projected := make([]domain.RosterPlayer, 0, len(roster))
+	for _, rosterPlayer := range roster {
+		if rosterPlayer.PlayerID == offeredPlayerID {
+			continue
+		}
+		projected = append(projected, rosterPlayer)
+	}
+	projected = append(projected, domain.RosterPlayer{
+		PlayerID:      proposalID + "-incoming",
+		GameID:        event.GameID,
+		Position:      requestedPosition,
+		OverallRating: player.OverallRating,
+		RosterStatus:  "active",
+		ContractYears: 1,
+		Salary:        incomingSalary,
+	})
+	cap := domain.CalculateSalaryCap(event.GameID, projected, event.SimulatedDate, event.OccurredAt, proposalID, domain.SubjectTradeProposed)
+	if cap.CommittedSalary > domain.DefaultLuxuryTaxLine {
+		rejected := tradeRejectedFromDecision(event, proposalID, rivalTeamID, "cap_blocked", "La propuesta empuja a PulseCity por encima de la linea de luxury tax.")
+		if err := insertRejectedTradeWithPlayer(ctx, tx, event, rejected, player, requestedPosition, incomingSalary, cap.LuxuryTaxSpace); err != nil {
+			return nil, nil, err
+		}
+		return nil, &rejected, tx.Commit(ctx)
+	}
+
+	proposed := domain.TradeProposedEvent{
+		EventMeta: domain.EventMeta{
+			EventID:       "trade-proposed-" + proposalID,
+			GameID:        event.GameID,
+			OccurredAt:    event.OccurredAt,
+			SchemaVersion: 1,
+		},
+		ProposalID:        proposalID,
+		SimulatedDate:     event.SimulatedDate,
+		RivalTeamID:       rivalTeamID,
+		OfferedPlayerID:   offeredPlayerID,
+		OfferedPlayerName: player.FullName,
+		OfferedSalary:     player.Salary,
+		RequestedPosition: requestedPosition,
+		IncomingSalary:    incomingSalary,
+		CapSpaceAfter:     cap.CapSpace,
+	}
+	if err := insertProposedTrade(ctx, tx, event, proposed); err != nil {
+		return nil, nil, err
+	}
+
+	return &proposed, nil, tx.Commit(ctx)
+}
+
+func (s *Store) ApplyTradeAcceptance(
+	ctx context.Context,
+	event domain.GMDecisionRegisteredEvent,
+) (*domain.TradeAcceptedEvent, *domain.RosterPatchEnvelope, *domain.SalaryCapCalculatedEvent, *domain.TradeRejectedEvent, error) {
+	if event.Kind != "trade_acceptance" {
+		return nil, nil, nil, nil, nil
+	}
+
+	proposalID := event.Payload["proposal_id"]
+	if proposalID == "" {
+		return nil, nil, nil, nil, fmt.Errorf("apply trade acceptance: missing proposal_id")
+	}
+	additionalAsset := event.Payload["accepted_additional_asset"]
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("begin apply trade acceptance: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	trade, err := loadTrade(ctx, tx, proposalID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			rejected := tradeRejectedFromDecision(event, proposalID, "", "proposal_not_found", "La propuesta de trade no existe o ya no esta disponible.")
+			return nil, nil, nil, &rejected, tx.Commit(ctx)
+		}
+		return nil, nil, nil, nil, err
+	}
+	if trade.Status == "accepted" {
+		return nil, nil, nil, nil, tx.Commit(ctx)
+	}
+	if trade.Status != "proposed" {
+		rejected := tradeRejectedFromDecision(event, proposalID, trade.RivalTeamID, "proposal_not_open", "La propuesta ya no esta abierta para aceptacion.")
+		return nil, nil, nil, &rejected, tx.Commit(ctx)
+	}
+
+	outgoing, err := loadRosterPlayer(ctx, tx, event.GameID, trade.OfferedPlayerID)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	if outgoing.RosterStatus != "active" {
+		rejected := tradeRejectedFromDecision(event, proposalID, trade.RivalTeamID, "player_unavailable", "El jugador ofrecido ya no esta activo.")
+		return nil, nil, nil, &rejected, tx.Commit(ctx)
+	}
+
+	incoming := domain.MaterializeIncomingTradePlayer(
+		event.GameID,
+		proposalID,
+		trade.RequestedPosition,
+		trade.IncomingSalary,
+		outgoing.OverallRating,
+		outgoing.SortOrder,
+	)
+	roster, err := loadRoster(ctx, tx, event.GameID)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	projected := make([]domain.RosterPlayer, 0, len(roster))
+	for _, player := range roster {
+		if player.PlayerID == outgoing.PlayerID {
+			player.RosterStatus = "traded"
+		}
+		projected = append(projected, player)
+	}
+	projected = append(projected, incoming)
+	cap := domain.CalculateSalaryCap(event.GameID, projected, event.SimulatedDate, event.OccurredAt, proposalID, domain.SubjectTradeAccepted)
+	if cap.CommittedSalary > domain.DefaultLuxuryTaxLine {
+		rejected := tradeRejectedFromDecision(event, proposalID, trade.RivalTeamID, "cap_blocked", "Aceptar la propuesta ahora empuja a PulseCity por encima de la linea de luxury tax.")
+		return nil, nil, nil, &rejected, tx.Commit(ctx)
+	}
+
+	if _, err := tx.Exec(ctx, `
+UPDATE team_roster_players
+SET roster_status = 'traded', updated_at = NOW()
+WHERE game_id = $1 AND player_id = $2 AND roster_status = 'active';
+`, event.GameID, outgoing.PlayerID); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("mark outgoing player traded %s: %w", outgoing.PlayerID, err)
+	}
+	if _, err := tx.Exec(ctx, `
+INSERT INTO team_roster_players (
+	player_id, game_id, full_name, position, overall_rating, roster_status, contract_years, salary, sort_order, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $8, NOW(), NOW())
+ON CONFLICT (player_id) DO NOTHING;
+`, incoming.PlayerID, incoming.GameID, incoming.FullName, incoming.Position, int16(incoming.OverallRating), int16(incoming.ContractYears), incoming.Salary, incoming.SortOrder); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("insert incoming trade player %s: %w", incoming.PlayerID, err)
+	}
+	if _, err := tx.Exec(ctx, `
+UPDATE team_trades
+SET status = 'accepted',
+	incoming_player_id = $2,
+	incoming_player_name = $3,
+	incoming_rating = $4,
+	accepted_additional_asset = $5,
+	accepted_at = $6,
+	updated_at = NOW()
+WHERE proposal_id = $1 AND status = 'proposed';
+`, proposalID, incoming.PlayerID, incoming.FullName, int16(incoming.OverallRating), additionalAsset, event.OccurredAt); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("mark trade accepted %s: %w", proposalID, err)
+	}
+	if err := saveSalaryCap(ctx, tx, cap); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	accepted := domain.TradeAcceptedEvent{
+		EventMeta: domain.EventMeta{
+			EventID:       "trade-accepted-" + proposalID,
+			GameID:        event.GameID,
+			OccurredAt:    event.OccurredAt,
+			SchemaVersion: 1,
+		},
+		ProposalID:              proposalID,
+		SimulatedDate:           event.SimulatedDate,
+		RivalTeamID:             trade.RivalTeamID,
+		OutgoingPlayerID:        outgoing.PlayerID,
+		OutgoingPlayerName:      outgoing.FullName,
+		IncomingPlayerID:        incoming.PlayerID,
+		IncomingPlayerName:      incoming.FullName,
+		IncomingPosition:        incoming.Position,
+		IncomingRating:          incoming.OverallRating,
+		IncomingSalary:          incoming.Salary,
+		AcceptedAdditionalAsset: additionalAsset,
+	}
+	rosterPatch := tradeRosterPatch(accepted)
+	salaryCapEvent := cap.SalaryCapCalculatedEvent()
+
+	return &accepted, &rosterPatch, &salaryCapEvent, nil, tx.Commit(ctx)
 }
 
 func (s *Store) DispatchScheduledMatchForDate(
@@ -786,6 +1052,184 @@ ORDER BY sort_order;
 	}
 
 	return roster, nil
+}
+
+func loadRosterPlayer(ctx context.Context, q queryer, gameID, playerID string) (domain.RosterPlayer, error) {
+	var player domain.RosterPlayer
+	var overallRating, contractYears int16
+	if err := q.QueryRow(ctx, `
+SELECT player_id, game_id, full_name, position, overall_rating, roster_status, contract_years, salary, sort_order
+FROM team_roster_players
+WHERE game_id = $1 AND player_id = $2;
+`, gameID, playerID).Scan(
+		&player.PlayerID,
+		&player.GameID,
+		&player.FullName,
+		&player.Position,
+		&overallRating,
+		&player.RosterStatus,
+		&contractYears,
+		&player.Salary,
+		&player.SortOrder,
+	); err != nil {
+		return domain.RosterPlayer{}, fmt.Errorf("load roster player %s/%s: %w", gameID, playerID, err)
+	}
+
+	player.OverallRating = uint8(overallRating)
+	player.ContractYears = uint8(contractYears)
+	return player, nil
+}
+
+func loadTradeStatus(ctx context.Context, q queryer, proposalID string) (string, bool, error) {
+	var status string
+	if err := q.QueryRow(ctx, `
+SELECT status
+FROM team_trades
+WHERE proposal_id = $1;
+`, proposalID).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("load trade status %s: %w", proposalID, err)
+	}
+
+	return status, true, nil
+}
+
+func loadTrade(ctx context.Context, q queryer, proposalID string) (storedTrade, error) {
+	var trade storedTrade
+	if err := q.QueryRow(ctx, `
+SELECT proposal_id, game_id, rival_team_id, offered_player_id, offered_player_name,
+	offered_salary, requested_position, incoming_salary, cap_space_after, status,
+	simulated_date
+FROM team_trades
+WHERE proposal_id = $1;
+`, proposalID).Scan(
+		&trade.ProposalID,
+		&trade.GameID,
+		&trade.RivalTeamID,
+		&trade.OfferedPlayerID,
+		&trade.OfferedPlayerName,
+		&trade.OfferedSalary,
+		&trade.RequestedPosition,
+		&trade.IncomingSalary,
+		&trade.CapSpaceAfter,
+		&trade.Status,
+		&trade.SimulatedDate,
+	); err != nil {
+		return storedTrade{}, fmt.Errorf("load trade %s: %w", proposalID, err)
+	}
+
+	return trade, nil
+}
+
+type storedTrade struct {
+	ProposalID        string
+	GameID            string
+	RivalTeamID       string
+	OfferedPlayerID   string
+	OfferedPlayerName string
+	OfferedSalary     int
+	RequestedPosition string
+	IncomingSalary    int
+	CapSpaceAfter     int
+	Status            string
+	SimulatedDate     string
+}
+
+func insertProposedTrade(ctx context.Context, q queryer, event domain.GMDecisionRegisteredEvent, proposed domain.TradeProposedEvent) error {
+	if _, err := q.Exec(ctx, `
+INSERT INTO team_trades (
+	proposal_id, game_id, rival_team_id, offered_player_id, offered_player_name,
+	offered_salary, requested_position, incoming_salary, cap_space_after, status,
+	source_decision_id, source_event_id, simulated_date, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'proposed', $10, $11, $12, NOW(), NOW());
+`, proposed.ProposalID, proposed.GameID, proposed.RivalTeamID, proposed.OfferedPlayerID, proposed.OfferedPlayerName, proposed.OfferedSalary, proposed.RequestedPosition, proposed.IncomingSalary, proposed.CapSpaceAfter, event.DecisionID, event.EventID, event.SimulatedDate); err != nil {
+		return fmt.Errorf("insert proposed trade %s: %w", proposed.ProposalID, err)
+	}
+	return nil
+}
+
+func insertRejectedTrade(ctx context.Context, q queryer, event domain.GMDecisionRegisteredEvent, rejected domain.TradeRejectedEvent, offeredPlayerID, requestedPosition string, incomingSalary int) error {
+	return insertRejectedTradeWithPlayer(ctx, q, event, rejected, domain.RosterPlayer{
+		PlayerID: offeredPlayerID,
+		GameID:   event.GameID,
+	}, requestedPosition, incomingSalary, 0)
+}
+
+func insertRejectedTradeWithPlayer(ctx context.Context, q queryer, event domain.GMDecisionRegisteredEvent, rejected domain.TradeRejectedEvent, player domain.RosterPlayer, requestedPosition string, incomingSalary, capSpaceAfter int) error {
+	if _, err := q.Exec(ctx, `
+INSERT INTO team_trades (
+	proposal_id, game_id, rival_team_id, offered_player_id, offered_player_name,
+	offered_salary, requested_position, incoming_salary, cap_space_after, status,
+	rejection_reason, rejection_detail, source_decision_id, source_event_id,
+	simulated_date, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'rejected', $10, $11, $12, $13, $14, NOW(), NOW());
+`, rejected.ProposalID, rejected.GameID, rejected.RivalTeamID, player.PlayerID, player.FullName, player.Salary, requestedPosition, incomingSalary, capSpaceAfter, rejected.Reason, rejected.Detail, event.DecisionID, event.EventID, event.SimulatedDate); err != nil {
+		return fmt.Errorf("insert rejected trade %s: %w", rejected.ProposalID, err)
+	}
+	return nil
+}
+
+func tradeRejectedFromDecision(event domain.GMDecisionRegisteredEvent, proposalID, rivalTeamID, reason, detail string) domain.TradeRejectedEvent {
+	return domain.TradeRejectedEvent{
+		EventMeta: domain.EventMeta{
+			EventID:       "trade-rejected-" + proposalID,
+			GameID:        event.GameID,
+			OccurredAt:    event.OccurredAt,
+			SchemaVersion: 1,
+		},
+		ProposalID:    proposalID,
+		SimulatedDate: event.SimulatedDate,
+		RivalTeamID:   rivalTeamID,
+		Reason:        reason,
+		Detail:        detail,
+	}
+}
+
+func parsePositiveInt(value string) (int, error) {
+	var parsed int
+	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil {
+		return 0, err
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("value must be positive")
+	}
+	return parsed, nil
+}
+
+func tradeRosterPatch(event domain.TradeAcceptedEvent) domain.RosterPatchEnvelope {
+	return domain.RosterPatchEnvelope{
+		Type:    domain.SubjectRosterPatchDelta,
+		Subject: domain.SubjectTradeAccepted,
+		GameID:  event.GameID,
+		Patch: domain.RosterStatePatch{
+			SimulatedDate: event.SimulatedDate,
+			SourceEventID: event.EventID,
+			SourceSubject: domain.SubjectTradeAccepted,
+			Players: []domain.PlayerEmotionalPatch{
+				{
+					PlayerID:       event.OutgoingPlayerID,
+					EmotionalState: "traded",
+					Summary:        event.OutgoingPlayerName + " fue traspasado.",
+					Availability:   "traded",
+					FullName:       event.OutgoingPlayerName,
+				},
+				{
+					PlayerID:       event.IncomingPlayerID,
+					EmotionalState: "arriving",
+					Summary:        event.IncomingPlayerName + " llega a PulseCity via trade.",
+					Availability:   "active",
+					FullName:       event.IncomingPlayerName,
+					Position:       event.IncomingPosition,
+					OverallRating:  event.IncomingRating,
+					Salary:         event.IncomingSalary,
+				},
+			},
+		},
+	}
 }
 
 func loadPlayerMatchStates(ctx context.Context, q queryer, gameID string) (map[string]domain.PlayerMatchState, error) {

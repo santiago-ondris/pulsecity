@@ -40,6 +40,52 @@ func TestAgentPatchFromStateChanged(t *testing.T) {
 	}
 }
 
+func TestTradePatchFromEvent(t *testing.T) {
+	event := TradeEvent{
+		EventMeta: EventMeta{
+			EventID: "trade-countered-proposal-1",
+			GameID:  "game-1",
+		},
+		ProposalID:              "proposal-1",
+		SimulatedDate:           "2026-11-01",
+		RivalTeamID:             "bos",
+		RequestedPosition:       "PG",
+		AdditionalAssetRequired: "second_round_pick",
+		Detail:                  "Contraoferta abierta.",
+	}
+
+	patch := TradePatchFromEvent(SubjectTradeCountered, event)
+
+	if patch.Type != SubjectTradePatchDelta {
+		t.Fatalf("TradePatchFromEvent() Type = %q, want %q", patch.Type, SubjectTradePatchDelta)
+	}
+	if patch.Patch.Status != "countered" {
+		t.Fatalf("TradePatchFromEvent() status = %q, want countered", patch.Patch.Status)
+	}
+	if patch.Patch.AdditionalAssetRequired != "second_round_pick" {
+		t.Fatalf("TradePatchFromEvent() asset = %q, want second_round_pick", patch.Patch.AdditionalAssetRequired)
+	}
+
+	accepted := TradePatchFromEvent(SubjectTradeAccepted, TradeEvent{
+		EventMeta: EventMeta{
+			EventID: "trade-accepted-proposal-1",
+			GameID:  "game-1",
+		},
+		ProposalID:         "proposal-1",
+		SimulatedDate:      "2026-11-01",
+		RivalTeamID:        "bos",
+		OutgoingPlayerID:   "player-1",
+		IncomingPlayerID:   "proposal-1-incoming",
+		IncomingPlayerName: "Jalen Warren",
+	})
+	if accepted.Patch.Status != "accepted" {
+		t.Fatalf("TradePatchFromEvent(accepted) status = %q, want accepted", accepted.Patch.Status)
+	}
+	if accepted.Patch.IncomingPlayerName != "Jalen Warren" {
+		t.Fatalf("TradePatchFromEvent(accepted) incoming = %q, want Jalen Warren", accepted.Patch.IncomingPlayerName)
+	}
+}
+
 func TestRelationsPatchFromRelationshipChanged(t *testing.T) {
 	event := AgentRelationshipChangedEvent{
 		EventMeta: EventMeta{

@@ -339,6 +339,24 @@ func TestCalculateSalaryCapUnderCap(t *testing.T) {
 	}
 }
 
+func TestMaterializeIncomingTradePlayerIsDeterministic(t *testing.T) {
+	first := MaterializeIncomingTradePlayer("game-1", "trade-1", "PG", 12_000_000, 76, 6)
+	second := MaterializeIncomingTradePlayer("game-1", "trade-1", "PG", 12_000_000, 76, 6)
+
+	if first != second {
+		t.Fatalf("MaterializeIncomingTradePlayer() = %+v, want %+v", first, second)
+	}
+	if first.PlayerID != "trade-1-incoming" {
+		t.Fatalf("MaterializeIncomingTradePlayer() player id = %q, want trade-1-incoming", first.PlayerID)
+	}
+	if first.Position != "PG" {
+		t.Fatalf("MaterializeIncomingTradePlayer() position = %q, want PG", first.Position)
+	}
+	if first.Salary != 12_000_000 {
+		t.Fatalf("MaterializeIncomingTradePlayer() salary = %d, want 12000000", first.Salary)
+	}
+}
+
 func TestCalculateSalaryCapLuxuryTax(t *testing.T) {
 	roster := []RosterPlayer{
 		{PlayerID: "p1", Salary: 120_000_000, RosterStatus: "active"},
