@@ -32,6 +32,7 @@ import {
   type ScenarioId,
 } from "../constants";
 import type { NewGameDraft } from "../types";
+import { useMedicalOperations } from "../medical/useMedicalOperations";
 import { useTradeOperations } from "../trades/useTradeOperations";
 
 const gatewayBaseUrl = "http://localhost:8080";
@@ -130,6 +131,16 @@ export function useNewGameFlow() {
       : "none";
 
   const tradeOperations = useTradeOperations({
+    activeAuthKind,
+    gameId,
+    gatewayBaseUrl,
+    guestToken,
+    sessionToken: userSession?.session_token,
+    simulatedDate: timeState.simulated_date,
+    onStatusChange: setStatus,
+  });
+
+  const medicalOperations = useMedicalOperations({
     activeAuthKind,
     gameId,
     gatewayBaseUrl,
@@ -421,6 +432,7 @@ export function useNewGameFlow() {
   function goBack() {
     switch (currentPage) {
       case "trade-center":
+      case "medical-center":
         syncPage("ceremony");
         return;
       case "scenario":
@@ -443,8 +455,22 @@ export function useNewGameFlow() {
       return;
     }
 
-    setUnlockedPage("trade-center");
+    setUnlockedPage((current) => (
+      flowPages.indexOf(current) >= flowPages.indexOf("trade-center") ? current : "trade-center"
+    ));
     syncPage("trade-center");
+  }
+
+  function openMedicalCenter() {
+    if (!gameId) {
+      setStatus("Necesitás una partida activa para abrir el Centro Médico.");
+      return;
+    }
+
+    setUnlockedPage((current) => (
+      flowPages.indexOf(current) >= flowPages.indexOf("medical-center") ? current : "medical-center"
+    ));
+    syncPage("medical-center");
   }
 
   function completeIdentityStep() {
@@ -1013,12 +1039,15 @@ export function useNewGameFlow() {
     }
   }
 
-  async function updateTimeControl(next: { speed?: 1 | 5 | 20; paused?: boolean }) {
+  async function updateTimeControl(
+    next: { speed?: 1 | 5 | 20; paused?: boolean },
+  ): Promise<boolean> {
     if (!gameId || activeAuthKind === "none") {
       setStatus("Necesitás una partida activa para controlar el tiempo.");
-      return;
+      return false;
     }
 
+    const previousTimeState = timeState;
     setTimeState((current) => ({
       ...current,
       speed: next.speed ?? current.speed,
@@ -1037,10 +1066,15 @@ export function useNewGameFlow() {
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
+        setTimeState(previousTimeState);
         setStatus(payload.error ?? "No se pudo cambiar el tiempo.");
+        return false;
       }
+      return true;
     } catch (error) {
+      setTimeState(previousTimeState);
       setStatus(error instanceof Error ? error.message : "Fallo de red al cambiar el tiempo.");
+      return false;
     }
   }
 
@@ -1183,6 +1217,9 @@ export function useNewGameFlow() {
     status,
     submittingNarrativeChoice,
     timeState,
+    medicalDecisionsByInjury: medicalOperations.decisionsByInjury,
+    medicalErrorsByInjury: medicalOperations.errorsByInjury,
+    medicalSubmittingInjuryIds: medicalOperations.submittingInjuryIds,
     tradeAcceptingProposalIds: tradeOperations.acceptingProposalIds,
     tradeError: tradeOperations.error,
     trades: tradeOperations.trades,
@@ -1199,6 +1236,7 @@ export function useNewGameFlow() {
     completeScenarioStep,
     forgotPassword,
     goBack,
+    openMedicalCenter,
     openTradeCenter,
     login,
     logoutUser,
@@ -1211,6 +1249,7 @@ export function useNewGameFlow() {
     sendAgentChatMessage,
     proposeTrade: tradeOperations.proposeTrade,
     acceptTrade: tradeOperations.acceptTrade,
+    submitMedicalDecision: medicalOperations.submitMedicalDecision,
   };
 }
 

@@ -7,6 +7,7 @@ import { ScenarioPage } from "./components/ScenarioPage";
 import { ManagementPage } from "./components/ManagementPage";
 import { LaunchPage } from "./components/LaunchPage";
 import { CeremonyPage } from "./components/CeremonyPage";
+import { MedicalCenterPage } from "./components/medical/MedicalCenterPage";
 import { TradeCenterPage } from "./components/trades/TradeCenterPage";
 import { OwnerIntroModal } from "./components/OwnerIntroModal";
 import { useNewGameFlow } from "./hooks/useNewGameFlow";
@@ -100,9 +101,12 @@ export function NewGameFlow() {
 
       {flow.currentPage === "ceremony" ? (
         <CeremonyPage
+          abbreviation={flow.draft.abbreviation}
+          cityName={flow.draft.cityName}
           currentStage={flow.currentStage}
           events={flow.events}
           financeState={flow.financeState}
+          franchiseName={flow.draft.franchiseName}
           gameId={flow.gameId}
           agentStates={flow.agentStates}
           chatMessages={flow.chatMessages}
@@ -117,6 +121,8 @@ export function NewGameFlow() {
           status={flow.status}
           timeState={flow.timeState}
           onSetPaused={(paused) => void flow.updateTimeControl({ paused })}
+          onStartSeason={() => flow.updateTimeControl({ paused: false, speed: 1 })}
+          onOpenMedicalCenter={flow.openMedicalCenter}
           onOpenTradeCenter={flow.openTradeCenter}
           onSendAgentChatMessage={(agentId, message, conversationId) =>
             flow.sendAgentChatMessage(agentId, message, conversationId)}
@@ -137,6 +143,19 @@ export function NewGameFlow() {
           onAcceptTrade={flow.acceptTrade}
           onBack={flow.goBack}
           onProposeTrade={flow.proposeTrade}
+        />
+      ) : null}
+
+      {flow.currentPage === "medical-center" ? (
+        <MedicalCenterPage
+          decisionsByInjury={flow.medicalDecisionsByInjury}
+          errorsByInjury={flow.medicalErrorsByInjury}
+          gameId={flow.gameId}
+          rosterStates={flow.rosterStates}
+          submittingInjuryIds={flow.medicalSubmittingInjuryIds}
+          timeState={flow.timeState}
+          onBack={flow.goBack}
+          onSubmitDecision={flow.submitMedicalDecision}
         />
       ) : null}
 

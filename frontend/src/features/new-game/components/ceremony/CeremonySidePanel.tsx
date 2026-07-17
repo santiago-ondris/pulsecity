@@ -1,6 +1,6 @@
 import { AgentDirectoryPanel } from "./AgentDirectoryPanel";
+import { CommandSummaryPanel } from "./CommandSummaryPanel";
 import { InboxPanel } from "./InboxPanel";
-import { SeasonPanel } from "./SeasonPanel";
 import { SystemPanel } from "./SystemPanel";
 import type { AgentChatState, CeremonySharedProps, CeremonyTab } from "./types";
 
@@ -12,9 +12,9 @@ interface CeremonySidePanelProps {
 }
 
 const tabs: { id: CeremonyTab; label: string }[] = [
-  { id: "agents", label: "Agentes" },
+  { id: "overview", label: "Resumen" },
   { id: "inbox", label: "Inbox" },
-  { id: "season", label: "Temporada" },
+  { id: "staff", label: "Staff" },
   { id: "system", label: "Sistema" },
 ];
 
@@ -37,20 +37,11 @@ export function CeremonySidePanel({ activeTab, chat, data, setActiveTab }: Cerem
       </div>
 
       <div className="ceremony-command-panel__body">
-        {activeTab === "agents" ? <AgentDirectoryPanel chat={chat} data={data} /> : null}
-        {activeTab === "inbox" ? <InboxPanel events={data.narrativeInbox} /> : null}
-        {activeTab === "season" ? (
-          <SeasonPanel
-            cityState={data.cityState}
-            financeState={data.financeState}
-            gameId={data.gameId}
-            mapState={data.mapState}
-            ownerIntroResponseLabel={data.ownerIntroResponseLabel}
-            recentResults={data.recentResults}
-            seasonState={data.seasonState}
-            status={data.status}
-          />
+        {activeTab === "overview" ? (
+          <CommandSummaryPanel data={data} onOpenStaff={() => setActiveTab("staff")} />
         ) : null}
+        {activeTab === "inbox" ? <InboxPanel events={data.narrativeInbox} /> : null}
+        {activeTab === "staff" ? <AgentDirectoryPanel chat={chat} data={data} /> : null}
         {activeTab === "system" ? <SystemPanel events={data.events} mapState={data.mapState} /> : null}
       </div>
     </aside>

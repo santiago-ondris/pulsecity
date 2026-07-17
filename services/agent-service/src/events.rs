@@ -159,6 +159,8 @@ pub struct RosterStatePatch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlayerEmotionalPatch {
     pub player_id: String,
+    pub full_name: String,
+    pub position: String,
     pub emotional_state: String,
     pub satisfaction: f64,
     pub loyalty: f64,

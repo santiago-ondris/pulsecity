@@ -1408,6 +1408,8 @@ pub fn apply_trade_accepted_to_player_agents(
             state.city_connection = clamp_unit(state.city_connection - 0.18);
             patches.push(PlayerEmotionalPatch {
                 player_id: state.player_id.clone(),
+                full_name: state.full_name.clone(),
+                position: state.position.clone(),
                 emotional_state: state.emotional_state.clone(),
                 satisfaction: state.satisfaction,
                 loyalty: state.loyalty,
@@ -1423,6 +1425,8 @@ pub fn apply_trade_accepted_to_player_agents(
             state.satisfaction = adjusted(state.satisfaction, 0.03);
             patches.push(PlayerEmotionalPatch {
                 player_id: state.player_id.clone(),
+                full_name: state.full_name.clone(),
+                position: state.position.clone(),
                 emotional_state: state.emotional_state.clone(),
                 satisfaction: state.satisfaction,
                 loyalty: state.loyalty,
@@ -1449,6 +1453,8 @@ pub fn apply_trade_accepted_to_player_agents(
         state.city_connection = 0.18;
         patches.push(PlayerEmotionalPatch {
             player_id: state.player_id.clone(),
+            full_name: state.full_name.clone(),
+            position: state.position.clone(),
             emotional_state: state.emotional_state.clone(),
             satisfaction: state.satisfaction,
             loyalty: state.loyalty,
@@ -1989,6 +1995,8 @@ fn player_patch(
 ) -> PlayerEmotionalPatch {
     PlayerEmotionalPatch {
         player_id: state.player_id.clone(),
+        full_name: state.full_name.clone(),
+        position: state.position.clone(),
         emotional_state: state.emotional_state.clone(),
         satisfaction: state.satisfaction,
         loyalty: state.loyalty,
@@ -2485,6 +2493,8 @@ mod tests {
         assert_eq!(patch.event_type, SUBJECT_ROSTER_PATCH);
         assert_eq!(patch.patch.players.len(), 1);
         assert_eq!(patch.patch.players[0].player_id, "game-1-player-01");
+        assert_eq!(patch.patch.players[0].full_name, "Mateo Cross");
+        assert_eq!(patch.patch.players[0].position, "PG");
     }
 
     #[test]

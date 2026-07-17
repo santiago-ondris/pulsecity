@@ -121,8 +121,8 @@ export function agentDefinitionFor(
   if (player) {
     return {
       id: player.player_id,
-      label: player.player_id,
-      role: "Jugador del roster",
+      label: player.full_name ?? player.player_id,
+      role: player.position ? `Jugador del roster · ${player.position}` : "Jugador del roster",
       domain: "rendimiento, rol, vestuario y experiencia personal dentro del roster",
       category: "roster",
       metrics: [

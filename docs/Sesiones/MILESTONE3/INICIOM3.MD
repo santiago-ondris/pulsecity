@@ -584,7 +584,7 @@ Resultado 2026-06-02:
 - seleccionar cualquier agente actualiza el foco y abre chat contra ese `agent_id`
 - el chat conserva el flujo LLM real de `M3.6`
 - los agentes no core usan contexto real desde `narrative-service`; si no tienen estado visual en frontend, igual pueden chatear por `agent_id`
-- limite conocido: los jugadores del roster hoy se muestran con `player_id`, porque el delta emocional no trae nombre/posicion contractual al frontend
+- limite resuelto en `M3.P1d-a`: el delta emocional incluye la identidad de lectura ya proyectada (`full_name`, `position`) y el frontend conserva `player_id` solo como identidad tecnica
 - prueba corrida: `npm run build --prefix frontend`
 
 ### Bloque C — Subsistemas profundos
@@ -871,7 +871,7 @@ Regla nueva vigente desde esta pausa:
 
 Todo mini milestone futuro que agregue una mecanica nueva incluye en su done "operable desde el frontend, aunque sea minimo". En M2 esta regla existia de facto (`M2.13` fue "frontend jugable"); en M3 se perdio y el costo fue acumular sistemas sin validar. La regla queda tambien escrita en AGENTS.md como principio permanente.
 
-#### M3.P1 — UI minima jugable de trades y decisiones medicas — PENDIENTE
+#### M3.P1 — UI minima jugable de trades y decisiones medicas — YA REALIZADO
 
 Objetivo:
 
@@ -912,6 +912,136 @@ Limites M3.P1a:
 - el selector de jugador usa estado vivo recibido por `roster.patch`; la rehidratacion REST completa del roster sigue reservada para `M3.22`
 - el playtest manual de al menos tres propuestas y la documentacion de game feel se cierran en `M3.P1c`, despues de agregar Centro Medico en `M3.P1b`
 - `M3.P1` permanece pendiente hasta cerrar medicina jugable y el playtest conjunto
+
+Avance 2026-07-15 — M3.P1b — Centro Medico jugable — YA REALIZADO:
+
+- se agrega ruta `/franchise/medical` y pagina independiente `MedicalCenterPage`
+- el Command Center incorpora acceso visible al Centro Medico y conserva el retorno explicito
+- la pagina deriva el parte medico desde el estado vivo recibido por `roster.patch`; no calcula lesiones ni disponibilidad en frontend
+- se muestran jugadores disponibles, casos activos, severidad, dias estimados y fecha esperada de retorno
+- cada lesion permite registrar desde la UI las cuatro decisiones de M3.9b: `rest`, `reduce_minutes`, `ignore_doctor` y `force_return`
+- el estado de envio, errores y confirmaciones por `injury_id` vive en `useMedicalOperations`
+- una respuesta HTTP aceptada confirma que la decision fue registrada, pero la UI no muta disponibilidad de forma optimista; espera el siguiente delta del backend
+- la pantalla distingue visualmente protocolo, carga reducida, ignorar recomendacion y alta forzada segun su riesgo, usando los colores semanticos del design system
+- se contemplan estados sin snapshot, roster sano, envio en curso, error y decision registrada
+- diseño validado registrado en `docs/plans/2026-07-15-m3-p1b-centro-medico-design.md`
+- nota de progreso creada en `docs/02_Progress/2026-07-15_M3_P1b_Centro_Medico_Jugable.md`
+- pruebas corridas: `npm run build --prefix frontend`, `GOCACHE=/tmp/pulsecity-gateway-gocache go -C services/gateway test ./...`, `make build`
+
+Limites M3.P1b:
+
+- las confirmaciones de decisiones medicas viven en memoria de la sesion; su rehidratacion REST completa sigue reservada para `M3.22` / `M3.23`
+- `M3.P1` permanece pendiente hasta completar `M3.P1c` con playtest manual conjunto y documentacion de game feel
+
+#### M3.P1c — Playtest conjunto de trades y medicina — YA REALIZADO
+
+Objetivo:
+
+Jugar manualmente los dos flujos que abrio `M3.P1` y registrar si las decisiones se entienden y tienen peso antes de construir Trade Deadline encima.
+
+Done:
+
+- al menos tres propuestas de trade realizadas desde Trade Center
+- todas las decisiones medicas que aparezcan durante la temporada respondidas desde Centro Medico
+- fricciones, claridad de estados y sensacion de las respuestas rivales/medicas registradas en `docs/02_Progress/`
+- aprendizajes concretos asentados como input de diseño para `M3.13`
+- `M3.P1` pasa a `YA REALIZADO`
+
+Avance 2026-07-15 — M3.P1c-a — Reset de experiencia inicial — YA REALIZADO:
+
+- la primera captura del playtest revelo un bloqueo previo al game feel de trades/medicina: no habia accion inicial dominante, el mapa invadia el panel de agentes, existia scroll horizontal y el contenido tecnico ocupaba la jerarquia principal
+- se pausa el playtest funcional hasta corregir la experiencia base; este hallazgo forma parte de `M3.P1c`, no es polish diferido a M5
+- una partida nueva y lista entra en un kickoff guiado, pausado, con CTA dominante `Comenzar temporada`
+- el CTA usa el control temporal existente (`paused = false`, `speed = 1`); no se agrega estado ni endpoint de gameplay
+- si el request de tiempo falla, el estado optimista hace rollback y el kickoff vuelve a mostrarse con error
+- durante la generacion del mapa se conserva una ceremonia propia y contenida; el kickoff aparece solo despues de `mapa.generacion_completa` y de responder al Owner
+- una partida con dias o partidos procesados entra directamente al Command Center operativo
+- la vista por defecto deja de ser el directorio completo de agentes y pasa a `Resumen`
+- la navegacion secundaria queda en `Resumen`, `Inbox`, `Staff` y `Sistema`; socket, pipeline y eventos crudos quedan confinados a `Sistema`
+- el resumen muestra pulso de temporada, record, cap, alertas, roster, operaciones y resultados recientes
+- Trade Center y Centro Medico conservan sus paginas propias; Staff abre buscador, directorio y chat bajo demanda
+- la grilla CSS pasa a ser un snapshot de ciudad con proporcion fija, tracks encogibles y `overflow: hidden`
+- el layout nuevo elimina margenes negativos/full-viewport del Command Center y define breakpoints para desktop, tablet y mobile sin scroll horizontal estructural
+- `CeremonyMapPanel` y `SeasonPanel` se eliminan al quedar reemplazados, evitando componentes huerfanos
+- diseño validado registrado en `docs/plans/2026-07-15-m3-p1c-a-command-center-kickoff-design.md`
+- nota de progreso creada en `docs/02_Progress/2026-07-15_M3_P1c_a_Reset_Experiencia_Inicial.md`
+- pruebas corridas: `npm run build --prefix frontend`, `GOCACHE=/tmp/pulsecity-gateway-gocache go -C services/gateway test ./...`, `make build`
+
+Limite de validacion M3.P1c-a:
+
+- el entorno de desarrollo del agente no dispone de navegador headless para generar capturas automaticas por viewport; la proxima revision visual en navegador del GM valida el resultado real y alimenta ajustes del mismo corte si fueran necesarios
+
+##### M3.P1c-b — Retomar playtest funcional — PLAYTEST REALIZADO, HALLAZGOS REGISTRADOS
+
+Con la experiencia base corregida, retomar el recorrido original: iniciar temporada desde el kickoff, realizar al menos tres propuestas de trade y responder las decisiones medicas que aparezcan. Registrar claridad, friccion y game feel como input para `M3.13`.
+
+Resultado de playtest 2026-07-17:
+
+- el GM pudo iniciar la temporada y navegar intuitivamente: supo donde entrar para operar cada mecanica sin asistencia externa
+- Trade Center resulto claro en su alcance actual; se realizaron dos propuestas, llegaron contraofertas y una negociacion pudo aceptarse y mutar el roster correctamente
+- Centro Medico permitio responder una decision medica sin friccion y desde el frontend
+- el rediseño de `M3.P1c-a` queda validado funcionalmente: Command Center resume y navega, mientras trades y medicina viven en paginas propias
+- el muestreo quedo en dos propuestas frente al objetivo formal de tres; se registra de forma explicita y no se presenta como tres ejecuciones
+- hallazgo de identidad: los jugadores iniciales aparecen mediante `player_id` en lugares donde deberian verse nombre y apellido; los jugadores recibidos por trade si muestran nombre porque el parche contractual del trade incluye `full_name`
+- hallazgo de agentes: gran parte de los agentes todavia tiene poca profundidad mecanica, acorde al roadmap pendiente, pero el chat tampoco refleja de forma confiable moods visibles como `frustrated`, `pressured` o `concerned`
+- se confirma un desacople tecnico: la UI muestra moods dinamicos provenientes de `agent_core_states`, mientras el contexto de chat se ensambla desde `agent_individual_states`, cuya capa puede conservar el estado inicial sembrado
+- hallazgo de ciclo: al terminar los 82 partidos la fecha puede continuar hasta julio sin transicion, pausa ni explicacion; Trade Deadline, Playoffs y Cierre siguen pendientes, pero la futura transicion debe evitar que el calendario avance silenciosamente fuera de fase
+- nota detallada: `docs/02_Progress/2026-07-17_M3_P1c_b_Playtest_Funcional.md`
+
+Decision de orden posterior al playtest:
+
+- antes de `M3.P2` se hacen dos microcorrecciones, sin ampliar mecanicas: identidad del roster inicial y coherencia entre estado dinamico visible y contexto del chat
+- el final silencioso de la temporada se registra como requisito de transicion para `M3.16`; no se implementan playoffs dentro de este corte
+- despues de esas correcciones se retoma `M3.P2` como refactor puro sobre comportamiento ya corregido
+- con `M3.P1d-a` y `M3.P1d-b` cerrados, el GM da por suficiente la cobertura funcional del recorrido y `M3.P1` queda `YA REALIZADO`; la desviacion de dos propuestas frente a tres permanece documentada
+
+##### M3.P1d-a — Identidad visible del roster inicial — YA REALIZADO
+
+Objetivo:
+
+Hacer que todo jugador del roster propio se muestre con nombre y apellido desde el primer snapshot disponible, conservando `player_id` solo como identidad tecnica.
+
+Done:
+
+- Command Center, Staff/directorio, Trade Center y Centro Medico muestran `full_name` para los jugadores iniciales y los recibidos por trade
+- los deltas siguen siendo delta-only y la identidad contractual conserva ownership de `team-service`
+- ningun componente usa un hash/ID como etiqueta principal cuando existe nombre contractual
+- pruebas del contrato y build del frontend limpios
+
+Resultado 2026-07-17:
+
+- `PlayerEmotionalPatch` de `agent-service` incorpora `full_name` y `position`
+- todos los parches emocionales de partido y trade retransmiten la identidad que `agent-service` ya proyecta desde `team_roster_players`
+- `AgentDirectoryPanel` usa nombre y apellido como etiqueta principal y conserva `player_id` como clave tecnica
+- Trade Center y Centro Medico ya tenian fallback a `full_name`, por lo que reciben nombres desde el primer `roster.patch` emocional disponible
+- no se agrego snapshot completo, endpoint REST ni escritura cruzada: `team-service` conserva ownership contractual
+- contrato actualizado en `shared/events/websocket_deltas.md`
+- nota de progreso: `docs/02_Progress/2026-07-17_M3_P1d_a_Identidad_Roster.md`
+- pruebas corridas: `cargo test --manifest-path services/agent-service/Cargo.toml`, `npm run build --prefix frontend`
+
+##### M3.P1d-b — Estado dinamico coherente en chat — YA REALIZADO
+
+Objetivo:
+
+Garantizar que el contexto enviado al chat use el mismo estado emocional dinamico que el frontend presenta al GM.
+
+Done:
+
+- un agente visible como `concerned`, `pressured`, `frustrated` u otro mood dinamico recibe ese estado en el prompt del chat
+- se conserva un unico ownership en `agent-service`; `narrative-service` solo lee contexto
+- se elimina el desacople entre la capa legacy de los cinco agentes core y `agent_individual_states` sin agregar profundidad mecanica nueva
+- pruebas cubren persistencia, lectura de contexto y prompt resultante
+
+Resultado 2026-07-17:
+
+- cada guardado transaccional de `agent_core_states` sincroniza el `mood` en `agent_individual_states.emotional_state`
+- `EnsureSchema` reconcilia de forma idempotente partidas existentes al iniciar `agent-service`, evitando esperar al proximo evento para corregir el chat
+- `narrative-service` sigue leyendo una sola fuente de contexto y no conoce la tabla legacy
+- el prompt conserva el estado emocional en el contexto; se agrego cobertura explicita para verificarlo
+- no se agregaron reacciones, personalidad ni contexto operativo nuevo: el corte corrige coherencia, no profundidad
+- validacion SQL sobre la partida existente dentro de una transaccion con `ROLLBACK`: se reconciliaron cinco agentes core y quedaron cero diferencias antes de revertir la prueba
+- nota de progreso: `docs/02_Progress/2026-07-17_M3_P1d_b_Estado_Chat.md`
+- pruebas corridas: `cargo test --manifest-path services/agent-service/Cargo.toml`, `GOCACHE=/tmp/pulsecity-narrative-gocache go -C services/narrative-service test ./...`
 
 #### M3.P2 — Particion de monolitos — PENDIENTE
 

@@ -148,6 +148,7 @@ func TestBuildAgentChatPromptIncludesDomainGuardrails(t *testing.T) {
 		"Tu dominio es estricto: finanzas, presupuesto, cap y riesgo economico.",
 		"Si el GM pregunta algo fuera de tu dominio",
 		"Iris Calder",
+		"estado emocional: alert",
 		"owner_intro_response en 2026-10-01",
 		"Que hacemos con la rotacion?",
 	} {

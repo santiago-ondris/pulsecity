@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import skylineBackdrop from "../../assets/landing-city-night.svg";
 import type {
@@ -15,12 +15,17 @@ import type {
   TimeClientState,
 } from "../../../types";
 import { agentDefinitionFor } from "./ceremony/agents";
-import { CeremonyMapPanel } from "./ceremony/CeremonyMapPanel";
+import { CommandCenterOverview } from "./ceremony/CommandCenterOverview";
 import { CeremonySidePanel } from "./ceremony/CeremonySidePanel";
 import { CeremonyTopbar } from "./ceremony/CeremonyTopbar";
+import { SeasonKickoffPanel } from "./ceremony/SeasonKickoffPanel";
+import { WorldGenerationPanel } from "./ceremony/WorldGenerationPanel";
 import type { CeremonySharedProps, CeremonyTab } from "./ceremony/types";
+import "./ceremony/commandCenter.css";
 
 interface CeremonyPageProps {
+  abbreviation: string;
+  cityName: string;
   currentStage: {
     label: string;
     title: string;
@@ -28,6 +33,7 @@ interface CeremonyPageProps {
   };
   events: RealtimeEvent[];
   financeState: FinanceClientState;
+  franchiseName: string;
   gameId: string;
   agentStates: AgentClientStates;
   chatMessages: ChatClientMessages;
@@ -43,14 +49,19 @@ interface CeremonyPageProps {
   timeState: TimeClientState;
   onSetPaused: (paused: boolean) => void;
   onSetSpeed: (speed: 1 | 5 | 20) => void;
+  onStartSeason: () => Promise<boolean>;
+  onOpenMedicalCenter: () => void;
   onOpenTradeCenter: () => void;
   onSendAgentChatMessage: (agentId: string, message: string, conversationId?: string) => Promise<string>;
 }
 
 export function CeremonyPage(props: CeremonyPageProps) {
-  const [activeTab, setActiveTab] = useState<CeremonyTab>("agents");
+  const [activeTab, setActiveTab] = useState<CeremonyTab>("overview");
   const [selectedAgentId, setSelectedAgentId] = useState("owner");
   const [draftMessage, setDraftMessage] = useState("");
+  const [kickoffDismissed, setKickoffDismissed] = useState(false);
+  const [startingSeason, setStartingSeason] = useState(false);
+  const [kickoffError, setKickoffError] = useState<string | null>(null);
   const activeConversationId = `chat-local-${selectedAgentId}`;
   const activeMessages = props.chatMessages[activeConversationId] ?? [];
   const selectedAgent = useMemo(
@@ -74,6 +85,20 @@ export function CeremonyPage(props: CeremonyPageProps) {
     status: props.status,
     timeState: props.timeState,
   };
+  const gamesPlayed = props.seasonState.wins + props.seasonState.losses;
+  const seasonHasAdvanced = props.timeState.days_processed > 0 || gamesPlayed > 0;
+  const worldReady = props.mapState.stage === "complete";
+  const kickoffEligible = worldReady
+    && Boolean(props.ownerIntroResponseLabel)
+    && !seasonHasAdvanced;
+  const showKickoff = kickoffEligible && !kickoffDismissed;
+
+  useEffect(() => {
+    setActiveTab("overview");
+    setKickoffDismissed(false);
+    setKickoffError(null);
+    setStartingSeason(false);
+  }, [props.gameId]);
 
   function submitMessage() {
     const message = draftMessage.trim();
@@ -85,6 +110,27 @@ export function CeremonyPage(props: CeremonyPageProps) {
     void props.onSendAgentChatMessage(selectedAgentId, message, activeConversationId);
   }
 
+  async function startSeason(): Promise<void> {
+    if (startingSeason) {
+      return;
+    }
+
+    setStartingSeason(true);
+    setKickoffError(null);
+    setKickoffDismissed(true);
+    const started = await props.onStartSeason();
+    if (!started) {
+      setKickoffDismissed(false);
+      setKickoffError("No pudimos iniciar la simulación. La temporada sigue pausada.");
+    }
+    setStartingSeason(false);
+  }
+
+  function openStaff(): void {
+    setKickoffDismissed(true);
+    setActiveTab("staff");
+  }
+
   return (
     <section
       className="ceremony-builder ceremony-builder--command"
@@ -94,34 +140,73 @@ export function CeremonyPage(props: CeremonyPageProps) {
       <div className="ceremony-builder__shade" />
 
       <CeremonyTopbar
+        abbreviation={props.abbreviation}
+        activeAlerts={props.narrativeInbox.length}
+        cityName={props.cityName}
         data={sharedData}
-        onOpenTradeCenter={props.onOpenTradeCenter}
+        franchiseName={props.franchiseName}
+        mapProgress={props.mapState.progress}
+        mode={!worldReady ? "generation" : showKickoff ? "kickoff" : "active"}
         onSetPaused={props.onSetPaused}
         onSetSpeed={props.onSetSpeed}
       />
 
-      <main className="ceremony-builder__main ceremony-builder__main--command">
-        <CeremonyMapPanel
+      {!worldReady ? (
+        <WorldGenerationPanel
+          cityName={props.cityName}
           cityState={props.cityState}
           currentStage={props.currentStage}
           mapState={props.mapState}
         />
-        <CeremonySidePanel
-          activeTab={activeTab}
-          chat={{
-            activeConversationId,
-            activeMessages,
-            draftMessage,
-            selectedAgent,
-            selectedAgentId,
-            setDraftMessage,
-            setSelectedAgentId,
-            submitMessage,
-          }}
-          data={sharedData}
-          setActiveTab={setActiveTab}
+      ) : showKickoff ? (
+        <SeasonKickoffPanel
+          cityName={props.cityName}
+          cityState={props.cityState}
+          error={kickoffError}
+          financeState={props.financeState}
+          franchiseName={props.franchiseName}
+          mapState={props.mapState}
+          narrativeInbox={props.narrativeInbox}
+          ownerIntroResponseLabel={props.ownerIntroResponseLabel}
+          rosterCount={Object.keys(props.rosterStates).length}
+          seasonState={props.seasonState}
+          starting={startingSeason}
+          onOpenMedicalCenter={props.onOpenMedicalCenter}
+          onOpenStaff={openStaff}
+          onOpenTradeCenter={props.onOpenTradeCenter}
+          onStartSeason={() => void startSeason()}
         />
-      </main>
+      ) : (
+        <main className="ceremony-builder__main ceremony-builder__main--command">
+          <CommandCenterOverview
+            cityName={props.cityName}
+            data={sharedData}
+            franchiseName={props.franchiseName}
+            rosterCount={Object.keys(props.rosterStates).length}
+            showStartPrompt={kickoffEligible}
+            startingSeason={startingSeason}
+            onOpenMedicalCenter={props.onOpenMedicalCenter}
+            onOpenStaff={openStaff}
+            onOpenTradeCenter={props.onOpenTradeCenter}
+            onStartSeason={() => void startSeason()}
+          />
+          <CeremonySidePanel
+            activeTab={activeTab}
+            chat={{
+              activeConversationId,
+              activeMessages,
+              draftMessage,
+              selectedAgent,
+              selectedAgentId,
+              setDraftMessage,
+              setSelectedAgentId,
+              submitMessage,
+            }}
+            data={sharedData}
+            setActiveTab={setActiveTab}
+          />
+        </main>
+      )}
     </section>
   );
 }

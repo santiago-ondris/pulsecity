@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS agent_individual_states (
 CREATE INDEX IF NOT EXISTS idx_agent_individual_states_game_category
 ON agent_individual_states (game_id, category);
 
+UPDATE agent_individual_states AS individual
+SET emotional_state = core.mood,
+    updated_at = NOW()
+FROM agent_core_states AS core
+WHERE individual.game_id = core.game_id
+    AND individual.agent_id = core.agent_id
+    AND individual.emotional_state IS DISTINCT FROM core.mood;
+
 CREATE TABLE IF NOT EXISTS agent_player_states (
     game_id TEXT NOT NULL,
     player_id TEXT NOT NULL,
@@ -1141,6 +1149,20 @@ ON CONFLICT (game_id, agent_id) DO UPDATE SET
         )
         .await
         .with_context(|| "save core agent state")?;
+
+    transaction
+        .execute(
+            "
+UPDATE agent_individual_states
+SET emotional_state = $3,
+    updated_at = NOW()
+WHERE game_id = $1
+    AND agent_id = $2;
+",
+            &[&state.game_id, &state.agent_id, &state.mood],
+        )
+        .await
+        .with_context(|| "sync core agent mood to individual state")?;
 
     Ok(())
 }

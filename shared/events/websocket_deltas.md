@@ -135,6 +135,8 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
     "players": [
       {
         "player_id": "game-player-01",
+        "full_name": "Mateo Cross",
+        "position": "PG",
         "emotional_state": "confident",
         "satisfaction": 0.12,
         "loyalty": 0.64,
@@ -148,6 +150,10 @@ Regla: WebSocket envia deltas, no estado completo. La rehidratacion se hace por 
   }
 }
 ```
+
+`full_name` y `position` acompañan el delta emocional como identidad de lectura
+para el frontend. `team-service` conserva el ownership contractual; `agent-service`
+solo retransmite la proyeccion que usa para asociar estado emocional con `player_id`.
 
 Campos opcionales M3.9 en cada jugador:
 

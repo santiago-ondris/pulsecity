@@ -1,0 +1,938 @@
+.new-game-shell:has(.ceremony-builder--command) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.ceremony-builder--command {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100svh;
+  margin-inline: 0;
+  padding: 16px clamp(14px, 2vw, 30px) 30px;
+  overflow-x: clip;
+}
+
+.ceremony-command-topbar {
+  width: min(1600px, 100%);
+  min-width: 0;
+  min-height: 72px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(420px, 1.35fr) minmax(300px, 0.85fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ceremony-command-topbar__identity,
+.ceremony-command-topbar__metrics,
+.ceremony-command-topbar__time,
+.ceremony-command-topbar__waiting {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(8, 14, 17, 0.9);
+  backdrop-filter: blur(14px);
+}
+
+.ceremony-command-topbar__identity {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.ceremony-command-topbar__identity > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-component);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.ceremony-command-topbar__identity > div {
+  min-width: 0;
+}
+
+.ceremony-command-topbar__identity strong {
+  overflow: hidden;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ceremony-command-topbar__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ceremony-command-topbar__metric {
+  min-width: 0;
+  padding: 11px 14px;
+}
+
+.ceremony-command-topbar__metric strong {
+  font-size: clamp(15px, 1.35vw, 20px);
+}
+
+.ceremony-command-topbar__time {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+}
+
+.ceremony-command-topbar__time button {
+  min-width: 0;
+  min-height: 44px;
+}
+
+.ceremony-command-topbar__waiting {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 10px 16px;
+}
+
+.ceremony-command-topbar__waiting span,
+.ceremony-command-topbar__waiting small {
+  color: var(--text-muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ceremony-command-topbar__waiting strong {
+  margin: 3px 0;
+  color: var(--semantic-warning);
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+.season-kickoff,
+.world-generation,
+.ceremony-builder__main--command {
+  position: relative;
+  z-index: 1;
+  width: min(1600px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+  padding-top: 14px;
+}
+
+.world-generation {
+  min-height: calc(100svh - 102px);
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(420px, 1.2fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.world-generation__status {
+  min-width: 0;
+  padding: clamp(24px, 4vw, 48px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(8, 14, 17, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.world-generation__status h1 {
+  margin: 8px 0 12px;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 4vw, 54px);
+  line-height: 1;
+}
+
+.world-generation__status > p:not(.eyebrow) {
+  margin: 0;
+  color: rgba(240, 240, 240, 0.62);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.world-generation__progress {
+  height: 6px;
+  margin-top: 28px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.world-generation__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-primary);
+  transition: width 150ms ease-out;
+}
+
+.world-generation__message {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.world-generation__message strong {
+  color: var(--accent-primary);
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.world-generation__message span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-kickoff {
+  min-height: calc(100svh - 102px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.season-kickoff__decision,
+.city-snapshot,
+.command-overview,
+.ceremony-command-panel {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background: rgba(8, 14, 17, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.season-kickoff__decision {
+  display: grid;
+  gap: 24px;
+  padding: clamp(24px, 4vw, 52px);
+}
+
+.season-kickoff__copy h1 {
+  max-width: 15ch;
+  margin: 8px 0 12px;
+  font-family: var(--font-display);
+  font-size: clamp(38px, 5vw, 68px);
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.season-kickoff__copy > p:last-child {
+  max-width: 62ch;
+  margin: 0;
+  color: rgba(240, 240, 240, 0.68);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.season-kickoff__brief {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.season-kickoff__brief > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 14px 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.season-kickoff__brief > div:nth-child(3),
+.season-kickoff__brief > div:last-child {
+  border-right: 0;
+}
+
+.season-kickoff__brief span,
+.command-overview__metrics span,
+.command-summary-panel__list span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.season-kickoff__brief strong {
+  overflow: hidden;
+  color: rgba(240, 240, 240, 0.86);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-kickoff__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.season-kickoff__start {
+  min-height: 76px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  padding: 14px 18px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-component);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease-out, background 100ms ease-out, transform 100ms ease-out;
+}
+
+.season-kickoff__start:hover,
+.season-kickoff__start:focus-visible {
+  border-color: var(--accent-primary);
+  background: rgba(0, 200, 150, 0.14);
+  outline: none;
+}
+
+.season-kickoff__start:active {
+  transform: scale(0.97);
+}
+
+.season-kickoff__start:disabled {
+  cursor: wait;
+  opacity: 0.55;
+  transform: none;
+}
+
+.season-kickoff__start span {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.season-kickoff__start small {
+  color: rgba(240, 240, 240, 0.58);
+  font-size: 10px;
+}
+
+.season-kickoff__error {
+  margin: 0;
+  color: var(--semantic-negative);
+  font-size: 11px;
+}
+
+.season-kickoff__secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.season-kickoff__secondary > span {
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.season-kickoff__secondary button {
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-component);
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(240, 240, 240, 0.7);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.season-kickoff__secondary button:hover,
+.season-kickoff__secondary button:focus-visible {
+  border-color: var(--accent-primary-border);
+  color: var(--accent-primary);
+  outline: none;
+}
+
+.city-snapshot {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.city-snapshot__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+  min-width: 0;
+}
+
+.city-snapshot__header > div {
+  min-width: 0;
+}
+
+.city-snapshot__header h2 {
+  overflow: hidden;
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.city-snapshot__header > span {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-component);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.city-snapshot__viewport {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: var(--city-map-ratio);
+  max-height: 520px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-component);
+  background: var(--bg-base);
+}
+
+.city-snapshot__grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.city-snapshot__grid .cell {
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.city-snapshot__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.city-snapshot__footer span {
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-component);
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.city-snapshot__footer strong {
+  margin-left: 3px;
+  color: rgba(240, 240, 240, 0.72);
+}
+
+.ceremony-builder__main--command {
+  min-height: calc(100svh - 102px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+  gap: 14px;
+  align-items: start;
+  transform: none;
+}
+
+.command-overview {
+  display: grid;
+  gap: 14px;
+  padding: clamp(18px, 2.2vw, 28px);
+}
+
+.command-overview__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: end;
+  min-width: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.command-overview__header > div {
+  min-width: 0;
+}
+
+.command-overview__header h1 {
+  overflow: hidden;
+  margin: 5px 0 6px;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3vw, 44px);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-overview__header p:last-child {
+  margin: 0;
+  color: rgba(240, 240, 240, 0.58);
+  font-size: 12px;
+}
+
+.command-overview__header > button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-component);
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.command-overview__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-component);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.command-overview__metrics > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.command-overview__metrics > div:last-child {
+  border-right: 0;
+}
+
+.command-overview__metrics strong {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-overview__body {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(230px, 0.65fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.command-operations {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.command-operations h2,
+.command-recent h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.command-operations > button {
+  min-width: 0;
+  min-height: 76px;
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-component);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 100ms ease-out, background 100ms ease-out;
+}
+
+.command-operations > button:hover,
+.command-operations > button:focus-visible {
+  border-color: var(--accent-primary-border);
+  background: var(--accent-primary-bg);
+  outline: none;
+}
+
+.command-operations button span {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.command-operations button strong {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-operations button small {
+  overflow: hidden;
+  color: rgba(240, 240, 240, 0.52);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-recent {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.command-recent ul {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.command-recent li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 3px 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-component);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.command-recent li > span {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-component);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.command-recent li > span.win {
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+}
+
+.command-recent li > span.loss {
+  background: #e0555516;
+  color: var(--semantic-negative);
+}
+
+.command-recent li strong,
+.command-recent li small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-recent li strong {
+  font-size: 10px;
+}
+
+.command-recent li small {
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.command-recent__empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-component);
+  color: rgba(240, 240, 240, 0.55);
+  font-size: 11px;
+}
+
+.ceremony-command-panel {
+  width: 100%;
+  max-width: 100%;
+  min-height: 560px;
+  max-height: calc(100svh - 116px);
+  position: sticky;
+  top: 14px;
+  overflow: hidden;
+}
+
+.ceremony-command-panel__tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ceremony-command-panel__tabs button {
+  min-width: 0;
+  min-height: 44px;
+  padding-inline: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ceremony-command-panel__body {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.command-summary-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.command-summary-panel__state {
+  padding: 16px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: var(--radius-panel);
+  background: var(--accent-primary-bg);
+}
+
+.command-summary-panel__state strong {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 23px;
+  line-height: 1.05;
+}
+
+.command-summary-panel__state > p:last-child {
+  margin: 9px 0 0;
+  color: rgba(240, 240, 240, 0.62);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.command-summary-panel__list {
+  display: grid;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-component);
+}
+
+.command-summary-panel__list > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.command-summary-panel__list > div:last-child {
+  border-bottom: 0;
+}
+
+.command-summary-panel__list strong {
+  overflow: hidden;
+  color: rgba(240, 240, 240, 0.76);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-summary-panel__staff {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-component);
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(240, 240, 240, 0.74);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.command-summary-panel__staff:hover,
+.command-summary-panel__staff:focus-visible {
+  border-color: var(--accent-primary-border);
+  color: var(--accent-primary);
+  outline: none;
+}
+
+@media (max-width: 1180px) {
+  .ceremony-command-topbar {
+    grid-template-columns: minmax(220px, 0.8fr) minmax(390px, 1.2fr);
+  }
+
+  .ceremony-command-topbar__time,
+  .ceremony-command-topbar__waiting {
+    grid-column: 1 / -1;
+  }
+
+  .season-kickoff,
+  .world-generation,
+  .ceremony-builder__main--command {
+    min-height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .season-kickoff {
+    align-items: start;
+  }
+
+  .world-generation {
+    min-height: auto;
+    align-items: start;
+  }
+
+  .season-kickoff > .city-snapshot {
+    width: min(820px, 100%);
+    justify-self: center;
+  }
+
+  .ceremony-command-panel {
+    min-height: 520px;
+    max-height: none;
+    position: static;
+  }
+}
+
+@media (max-width: 820px) {
+  .ceremony-builder--command {
+    padding: 10px 10px 24px;
+  }
+
+  .ceremony-command-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .ceremony-command-topbar__time,
+  .ceremony-command-topbar__waiting {
+    grid-column: auto;
+  }
+
+  .season-kickoff__brief,
+  .command-overview__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .season-kickoff__brief > div:nth-child(2n),
+  .command-overview__metrics > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .season-kickoff__brief > div:nth-child(-n + 3),
+  .command-overview__metrics > div:nth-child(-n + 2) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .command-overview__body {
+    grid-template-columns: 1fr;
+  }
+
+  .command-recent ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .ceremony-command-topbar__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .ceremony-command-topbar__metric {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .ceremony-command-topbar__metric:last-child {
+    border-bottom: 0;
+  }
+
+  .season-kickoff__decision,
+  .command-overview {
+    padding: 18px 14px;
+  }
+
+  .season-kickoff__brief,
+  .command-overview__metrics,
+  .command-recent ul {
+    grid-template-columns: 1fr;
+  }
+
+  .season-kickoff__brief > div,
+  .command-overview__metrics > div {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .season-kickoff__brief > div:last-child,
+  .command-overview__metrics > div:last-child {
+    border-bottom: 0;
+  }
+
+  .season-kickoff__secondary {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .season-kickoff__secondary button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .command-overview__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .command-overview__header h1 {
+    white-space: normal;
+  }
+
+  .command-overview__header > button {
+    width: 100%;
+  }
+
+  .ceremony-command-panel__tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .season-kickoff__start,
+  .command-operations > button {
+    transition: none;
+  }
+}

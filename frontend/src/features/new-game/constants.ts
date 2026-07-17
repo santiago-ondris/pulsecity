@@ -107,6 +107,7 @@ export const flowPages = [
   "launch",
   "ceremony",
   "trade-center",
+  "medical-center",
 ] as const;
 
 export type FlowPage = (typeof flowPages)[number];
@@ -120,6 +121,7 @@ export const pagePaths: Record<FlowPage, string> = {
   launch: "/new-game/review",
   ceremony: "/new-game/ceremony",
   "trade-center": "/franchise/trades",
+  "medical-center": "/franchise/medical",
 };
 
 export const initialDraft = {

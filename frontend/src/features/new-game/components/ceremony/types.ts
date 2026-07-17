@@ -12,7 +12,7 @@ import type {
   TimeClientState,
 } from "../../../../types";
 
-export type CeremonyTab = "agents" | "inbox" | "season" | "system";
+export type CeremonyTab = "overview" | "inbox" | "staff" | "system";
 export type AgentDirectoryCategory = "basketball_ops" | "business_ops" | "city" | "press" | "roster";
 
 export interface CoreAgentDefinition {
