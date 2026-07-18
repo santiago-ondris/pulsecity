@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/pulsecity/services/gateway/internal/domain"
@@ -235,6 +236,26 @@ func (d Dependencies) upgradeGuest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (d Dependencies) createGuestSession(w http.ResponseWriter, r *http.Request) {
+	token := "guest_" + uuid.NewString()
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := d.Store.CreateGuestSession(ctx, token); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to create guest session",
+		})
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	writeJSON(w, http.StatusCreated, domain.GuestSession{
+		GuestToken: token,
+		CreatedAt:  now,
+		LastSeenAt: now,
+	})
+}
+
 func (d Dependencies) requireActor(w http.ResponseWriter, r *http.Request) (actor, bool) {
 	sessionToken := sessionTokenFromRequest(r)
 	guestToken := guestTokenFromRequest(r)
@@ -314,6 +335,9 @@ func (d Dependencies) requireActor(w http.ResponseWriter, r *http.Request) (acto
 	}, true
 }
 
+func guestTokenFromRequest(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Guest-Token"))
+}
 func sessionTokenFromRequest(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-Session-Token"))
 }
